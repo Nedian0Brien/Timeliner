@@ -1,0 +1,35 @@
+# 기본: 저장소에는 LF로 넣고, 체크아웃할 때도 LF로 꺼낸다.
+* text=auto eol=lf
+
+# Xcode 프로젝트 파일.
+#
+# 파일을 추가하거나 지우면 이 파일을 손으로 고쳐야 하는 프로젝트다(CLAUDE.md 참고).
+# `-merge`는 3-way 자동 병합을 끄고 항상 충돌로 남긴다 — 자동으로 섞인 pbxproj는
+# 열어보기 전까지 깨진 줄 모르기 때문에, 사람이 보게 만드는 편이 싸다.
+*.pbxproj      -merge
+*.xcscheme     -merge
+*.xcworkspacedata -merge
+
+# 텍스트로 다룰 것
+*.swift        text
+*.md           text
+*.json         text
+*.plist        text
+*.entitlements text
+*.mjs          text
+*.js           text
+*.html         text
+*.yml          text
+*.yaml         text
+*.sh           text eol=lf
+
+# 바이너리 (diff·병합 시도를 하지 않는다)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.pdf   binary
+*.zip   binary
+*.xcassets/** binary
+
+# 언어 통계: docs/는 README용 자료이지 앱 코드가 아니다.
+docs/**        linguist-documentation

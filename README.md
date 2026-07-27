@@ -466,8 +466,7 @@ TimelinerApp/
 docs/screenshots/            # README용 스크린샷
 scripts/
 └── serve-sim-cloudflare-proxy.mjs   # 시뮬레이터 스트림을 한 포트로 모으는 개발 프록시
-my_timeline_app.html         # 초기 React 프로토타입 (역사적 기록)
-Timeliner-app.html           # 위 프로토타입의 번들 산출물
+.gitattributes               # 줄바꿈 정규화 · pbxproj 자동 병합 차단
 ```
 
 ---
@@ -479,6 +478,8 @@ Timeliner-app.html           # 위 프로토타입의 번들 산출물
 > [!IMPORTANT]
 > **Xcode 프로젝트는 파일 시스템 동기화 그룹을 쓰지 않습니다.**
 > 파일을 추가하거나 지우면 `project.pbxproj`를 직접 고쳐야 합니다. 고치기 전에 백업을 뜨세요.
+> 같은 이유로 `.gitattributes`가 이 파일의 자동 병합을 꺼 두었습니다 — 병합 충돌이 나면
+> 사람이 풀어야 합니다.
 
 > [!WARNING]
 > **공유 스킴을 지우지 마세요.**

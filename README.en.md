@@ -472,8 +472,7 @@ TimelinerApp/
 docs/screenshots/            # images used by this README
 scripts/
 └── serve-sim-cloudflare-proxy.mjs   # dev proxy folding the simulator stream onto one port
-my_timeline_app.html         # the original React prototype (kept as history)
-Timeliner-app.html           # bundled output of that prototype
+.gitattributes               # line-ending normalisation · no auto-merge for pbxproj
 ```
 
 ---
@@ -485,6 +484,8 @@ This repository has a few traps.
 > [!IMPORTANT]
 > **The Xcode project does not use file-system synchronized groups.**
 > Adding or removing a file means editing `project.pbxproj` by hand. Back it up first.
+> For the same reason `.gitattributes` turns off auto-merge for that file — a merge conflict
+> there is yours to resolve.
 
 > [!WARNING]
 > **Do not delete the shared scheme.**
