@@ -25,8 +25,15 @@ enum AppTab: String, Hashable, CaseIterable {
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appearance: AppearanceSettings
     @EnvironmentObject private var dataStore: DataStore
+    @StateObject private var notifications = NotificationScheduler.shared
+
+    // Read here rather than in each tab because notifications are an app-wide fact, and
+    // this is the one place that outlives every screen that can change them.
+    @Query private var allTodos: [TodoItem]
+    @Query private var allSchedules: [Schedule]
     @State private var selection: AppTab = .timeline
     @State private var recordAddedPulse: Int = 0
     @State private var recordInputDraft = RecordInputDraft()
@@ -69,6 +76,19 @@ struct RootView: View {
             )
             .presentationBackground(.clear)
         }
+        // Pending notifications are rewritten whenever the thing they describe changes.
+        // The signature is what makes that cheap: `@Query` republishes on any edit
+        // anywhere, and most of those edits — a record's text, a photo — have nothing to
+        // do with what gets announced.
+        .task(id: notificationSignature) {
+            await notifications.sync(todos: allTodos, schedules: allSchedules)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Coming back from the background is also when a permission granted in iOS
+            // Settings first becomes visible to the app.
+            guard phase == .active else { return }
+            Task { await notifications.sync(todos: allTodos, schedules: allSchedules) }
+        }
         .task {
             // Only the sample store is ever seeded. The real one is the point of the
             // setting; putting design fixtures in it would defeat it.
@@ -94,6 +114,21 @@ struct RootView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { composerPresented = true }
+    }
+
+    /// What the pending notifications are built from, and nothing else.
+    ///
+    /// The digest counts a day's todos and schedules, and each alarm needs its own time
+    /// and text — so those are the fields, plus the digest settings that decide whether
+    /// and when to send it at all.
+    private var notificationSignature: String {
+        let todos = allTodos
+            .map { "\($0.id)|\($0.reminderAt?.timeIntervalSince1970 ?? -1)|\($0.completed)|\($0.date.timeIntervalSince1970)|\($0.text)" }
+            .joined(separator: ";")
+        let schedules = allSchedules
+            .map { "\($0.id)|\($0.date.timeIntervalSince1970)" }
+            .joined(separator: ";")
+        return "\(notifications.digestEnabled)|\(notifications.digestMinutes)|\(todos)|\(schedules)"
     }
 
     /// The moment the background draws, which the time slider can move away from the

@@ -14,6 +14,13 @@ final class TodoItem {
     /// reads it to move a finished block from when it was written down to when the work
     /// actually ended.
     var completedAt: Date? = nil
+    /// When to raise a notification for this item, or `nil` for none.
+    ///
+    /// A whole moment rather than a time of day, even though `date` only ever holds a
+    /// start of day. Notifications are scheduled against an absolute instant, and keeping
+    /// the day here too means the two can never disagree about which day is meant — the
+    /// edit sheet moves this along whenever `date` moves.
+    var reminderAt: Date? = nil
 
     init(
         id: UUID = UUID(),
@@ -23,7 +30,8 @@ final class TodoItem {
         sortOrder: Int = 0,
         reminderIdentifier: String? = nil,
         createdAt: Date = Date(),
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        reminderAt: Date? = nil
     ) {
         self.id = id
         self.date = date
@@ -33,6 +41,7 @@ final class TodoItem {
         self.reminderIdentifier = reminderIdentifier
         self.createdAt = createdAt
         self.completedAt = completedAt
+        self.reminderAt = reminderAt
     }
 }
 

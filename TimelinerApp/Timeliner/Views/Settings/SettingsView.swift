@@ -1,10 +1,12 @@
 import PhotosUI
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var appearance: AppearanceSettings
     @EnvironmentObject private var dataStore: DataStore
+    @StateObject private var notifications = NotificationScheduler.shared
     @Environment(\.colorScheme) private var scheme
 
     @Query private var schedules: [Schedule]
@@ -24,6 +26,7 @@ struct SettingsView: View {
                     if appearance.mode == .sky {
                         previewTimeCard
                     }
+                    notificationCard
                     dataModeCard
                 }
                 .padding(.horizontal, 16)
@@ -34,6 +37,75 @@ struct SettingsView: View {
             .background { AppBackground() }
             .navigationTitle("설정")
         }
+    }
+
+    // MARK: - Notifications
+
+    private var notificationCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("알림", systemImage: "bell")
+
+            if notifications.isAuthorized {
+                Toggle("하루 요약", isOn: Binding(
+                    get: { notifications.digestEnabled },
+                    set: { notifications.digestEnabled = $0 }
+                ))
+
+                if notifications.digestEnabled {
+                    HStack {
+                        Text("보낼 시각")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(DateHelpers.format12Hour(fromHHmm: digestHHmm))
+                            .font(.subheadline.bold())
+                            .monospacedDigit()
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(notifications.digestMinutes) },
+                            set: { notifications.digestMinutes = Int($0) }
+                        ),
+                        in: 0...1_439,
+                        step: 5
+                    )
+                }
+
+                Text("그날 할 일과 일정이 있을 때만 보냅니다. 할 일 하나하나의 알림은 그 할 일을 열어서 켭니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(notifications.authorizationStatus == .denied
+                     ? "iOS 설정에서 Timeliner의 알림을 켜야 합니다."
+                     : "할 일과 하루 요약을 알리려면 알림 권한이 필요합니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if notifications.authorizationStatus == .denied {
+                    Button("iOS 설정 열기") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    }
+                    .buttonStyle(.glass)
+                } else {
+                    Button("알림 허용") {
+                        Task { await notifications.requestAuthorization() }
+                    }
+                    .buttonStyle(.glass)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+        .animation(.snappy(duration: 0.25), value: notifications.digestEnabled)
+        .task { await notifications.refreshAuthorizationStatus() }
+    }
+
+    private var digestHHmm: String {
+        String(format: "%02d:%02d", notifications.digestMinutes / 60, notifications.digestMinutes % 60)
     }
 
     // MARK: - Background mode
