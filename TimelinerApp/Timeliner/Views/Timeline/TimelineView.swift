@@ -610,6 +610,16 @@ struct TimelineTabView: View {
         .background(.clear)
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        // Nothing on the timeline is typed into — the pill is a button, and the composer
+        // that does take text is a separate full-screen presentation. So the keyboard has
+        // no business resizing this scroll view, and letting it try is what left the
+        // timeline pushed up: raising the composer's keyboard took 208pt off the viewport
+        // and added it to the bottom inset, and on dismissal the two came back on
+        // different frames. Landing on the frame where the viewport had returned but the
+        // inset had not left the content shifted up by a keyboard's height, with that much
+        // blank space under `지금`. Declining the inset outright means there is no
+        // restoration to get wrong.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         // With no navigation bar there is nothing to keep cards from running into the
         // status bar. `.soft` fades the blur out gradually instead of ending on the
         // hard line a bar would have drawn.
