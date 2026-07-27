@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode / build output
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+
+# Keep xcshareddata: the shared Timeliner.xcscheme is what lets
+# `xcodebuild test` find the unit-test target.
+!**/xcshareddata/

@@ -1,0 +1,289 @@
+import PhotosUI
+import SwiftData
+import SwiftUI
+
+struct SettingsView: View {
+    @EnvironmentObject private var appearance: AppearanceSettings
+    @EnvironmentObject private var dataStore: DataStore
+    @Environment(\.colorScheme) private var scheme
+
+    @Query private var schedules: [Schedule]
+    @Query private var records: [Record]
+    @Query private var todos: [TodoItem]
+
+    @State private var photoItem: PhotosPickerItem?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 18) {
+                    backgroundCard
+                    if appearance.mode == .custom {
+                        customBackgroundCard
+                    }
+                    if appearance.mode == .sky {
+                        previewTimeCard
+                    }
+                    dataModeCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 80)
+            }
+            .animation(.snappy(duration: 0.25), value: appearance.mode)
+            .background { AppBackground() }
+            .navigationTitle("설정")
+        }
+    }
+
+    // MARK: - Background mode
+
+    private var backgroundCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("배경", systemImage: appearance.mode.systemImage)
+
+            Picker("배경", selection: modeBinding) {
+                ForEach(BackgroundMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(appearance.mode.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+    }
+
+    private var modeBinding: Binding<BackgroundMode> {
+        Binding(get: { appearance.mode }, set: { appearance.mode = $0 })
+    }
+
+    // MARK: - Preview time
+
+    /// Only offered under `하늘`, which is the only mode that has anything to say about
+    /// the hour.
+    private var previewTimeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                cardHeader("하늘 시각", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                Spacer()
+                Text(appearance.usesPreviewTime ? previewLabel : "현재 시각")
+                    .font(.subheadline.bold())
+                    .monospacedDigit()
+                    .foregroundStyle(appearance.usesPreviewTime ? Color.accentColor : .secondary)
+            }
+
+            Slider(
+                value: previewBinding,
+                in: 0...1_439,
+                step: 5
+            )
+
+            HStack(spacing: 10) {
+                Button("현재 시각으로") {
+                    appearance.resetPreviewTime()
+                }
+                .buttonStyle(.glass)
+                .disabled(!appearance.usesPreviewTime)
+
+                Spacer(minLength: 0)
+
+                Text("배경만 움직입니다. 타임라인의 '지금'은 실제 시각에 그대로 있습니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+    }
+
+    /// Reading the slider when it is off gives it the real clock, so the handle starts
+    /// where the eye already is rather than snapping back to midnight.
+    private var previewBinding: Binding<Double> {
+        Binding(
+            get: {
+                appearance.usesPreviewTime
+                    ? Double(appearance.previewMinutes)
+                    : Double(DateHelpers.minutesSinceMidnight(from: Date()))
+            },
+            set: { appearance.previewMinutes = Int($0) }
+        )
+    }
+
+    private var previewLabel: String {
+        let minutes = appearance.previewMinutes
+        return String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
+
+    // MARK: - Custom background
+
+    private var customBackgroundCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("커스텀 배경", systemImage: "photo.on.rectangle.angled")
+
+            Picker("출처", selection: sourceBinding) {
+                ForEach(CustomBackgroundSource.allCases) { source in
+                    Text(source.label).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            switch appearance.customSource {
+            case .photo:
+                photoSource
+            case .unsplash:
+                unsplashSource
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+    }
+
+    private var sourceBinding: Binding<CustomBackgroundSource> {
+        Binding(get: { appearance.customSource }, set: { appearance.customSource = $0 })
+    }
+
+    private var photoSource: some View {
+        // Read out here rather than inside the picker's label, which is a sendable
+        // closure and cannot reach back into the main-actor settings object.
+        let hasPhoto = appearance.hasCustomPhoto
+        return HStack(spacing: 12) {
+            PhotosPicker(selection: $photoItem, matching: .images, preferredItemEncoding: .current) {
+                Label(hasPhoto ? "사진 변경" : "사진 고르기", systemImage: "photo")
+            }
+            .buttonStyle(.glass)
+            .onChange(of: photoItem) { _, item in
+                loadPhoto(item)
+            }
+
+            Text(hasPhoto ? "고른 사진이 배경으로 쓰이고 있습니다." : "아직 고른 사진이 없습니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var unsplashSource: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(UnsplashBackground.all) { background in
+                        let isSelected = background.id == appearance.unsplashBackgroundID
+                        UnsplashImage(background: background, width: 200, height: 320)
+                            .frame(width: 66, height: 106)
+                            .clipShape(.rect(cornerRadius: 12))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(
+                                        isSelected ? Color.accentColor : Color.white.opacity(0.25),
+                                        lineWidth: isSelected ? 3 : 1
+                                    )
+                            }
+                            .contentShape(.rect)
+                            .onTapGesture {
+                                appearance.unsplashBackgroundID = background.id
+                            }
+                            .accessibilityLabel("\(background.author)의 사진")
+                            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: 110)
+
+            // Unsplash asks for the photographer and a link back, and it costs one line.
+            let selected = UnsplashBackground.named(appearance.unsplashBackgroundID)
+            Link(destination: selected.sourceURL) {
+                HStack(spacing: 4) {
+                    Text("사진: \(selected.author) · Unsplash")
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            appearance.storeCustomPhoto(data)
+            photoItem = nil
+        }
+    }
+
+    // MARK: - Data mode
+
+    private var dataModeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("데이터 모드", systemImage: "cylinder.split.1x2")
+
+            Picker("데이터 모드", selection: dataModeBinding) {
+                ForEach(DataMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(dataStore.mode.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+                .padding(.vertical, 2)
+
+            HStack(spacing: 0) {
+                countColumn("일정", schedules.count)
+                countColumn("할 일", todos.count)
+                countColumn("기록", records.count)
+            }
+
+            Label(
+                "개발용 설정입니다. 두 저장소는 서로를 보지 못하므로, 전환해도 반대쪽 데이터는 그대로 남습니다.",
+                systemImage: "hammer"
+            )
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+    }
+
+    private var dataModeBinding: Binding<DataMode> {
+        Binding(get: { dataStore.mode }, set: { dataStore.select($0) })
+    }
+
+    private func countColumn(_ title: String, _ count: Int) -> some View {
+        VStack(spacing: 3) {
+            Text("\(count)")
+                .font(.title3.bold())
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func cardHeader(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.subheadline.bold())
+            .foregroundStyle(TimelinerDesign.foreground(for: scheme))
+    }
+}
