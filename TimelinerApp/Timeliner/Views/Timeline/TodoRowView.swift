@@ -7,10 +7,15 @@ struct TodoRowView: View {
     @StateObject private var syncManager = EventKitSyncManager.shared
     @State private var isUpdating = false
     @State private var errorMessage: String?
+    @State private var editing = false
 
+    // The row carries two actions, so it is two buttons rather than one. Ticking a todo
+    // off and opening it to change the wording are both things you reach for by tapping
+    // the row, and the only place to put that boundary is where the eye already reads
+    // one: the circle is the state, the words are the todo.
     var body: some View {
-        Button(action: toggleCompletion) {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
+            Button(action: toggleCompletion) {
                 ZStack {
                     Image(systemName: todo.completed ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 20, weight: .regular))
@@ -23,7 +28,16 @@ struct TodoRowView: View {
                             .controlSize(.mini)
                     }
                 }
+                // Widened past the glyph so the circle is a comfortable target without
+                // taking a bite out of the text's.
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+            .accessibilityLabel(todo.completed ? "완료 해제" : "완료로 표시")
 
+            Button { editing = true } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(todo.text)
                         .font(.body)
@@ -37,12 +51,16 @@ struct TodoRowView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(todo.text) 수정")
+            .accessibilityHint("할 일의 내용과 날짜를 바꿉니다.")
         }
-        .buttonStyle(.plain)
-        .disabled(isUpdating)
         .padding(.vertical, 2)
+        .sheet(isPresented: $editing) {
+            TodoEditView(mode: .edit(todo))
+        }
         .alert("저장 실패", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }

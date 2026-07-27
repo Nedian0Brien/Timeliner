@@ -11,16 +11,20 @@ struct TodoListView: View {
     @State private var showCompleted: Bool = true
     @State private var searchQuery: String = ""
     @State private var errorMessage: String?
+    @State private var composingNew = false
 
     var body: some View {
         NavigationStack {
             Group {
                 if filtered.isEmpty {
-                    ContentUnavailableView(
-                        "할 일이 없습니다",
-                        systemImage: "checkmark.seal",
-                        description: Text("타임라인에서 새로운 할 일을 추가해보세요.")
-                    )
+                    ContentUnavailableView {
+                        Label("할 일이 없습니다", systemImage: "checkmark.seal")
+                    } description: {
+                        Text("여기서 바로 하나 적어보세요.")
+                    } actions: {
+                        Button("할 일 추가") { composingNew = true }
+                            .buttonStyle(.glassProminent)
+                    }
                 } else {
                     list
                 }
@@ -35,6 +39,15 @@ struct TodoListView: View {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { composingNew = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("할 일 추가")
+                }
+            }
+            .sheet(isPresented: $composingNew) {
+                TodoEditView(mode: .create(day: Date()))
             }
             .searchable(text: $searchQuery, prompt: "할 일 검색")
             .alert("저장 실패", isPresented: Binding(
@@ -81,6 +94,20 @@ struct TodoListView: View {
                                 }
                             }
                     }
+
+                    // Adding to *this* day without going through a sheet and picking the
+                    // date back out of it. Hidden while searching, where a row appended
+                    // to a filtered list would land somewhere the query does not match
+                    // and vanish as it is typed.
+                    if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AddTodoRow(date: date, nextSortOrder: nextSortOrder(after: items))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .glassCard(cornerRadius: 16)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                 } header: {
                     HStack {
                         Text(DateHelpers.koreanDateLabel(date))
@@ -106,6 +133,20 @@ struct TodoListView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .contentMargins(.bottom, 100, for: .scrollContent)
+    }
+
+    /// One past the last row of that day.
+    ///
+    /// Counted over every todo of the day rather than the ones on screen: with completed
+    /// items hidden, numbering from the visible list would hand out an order a hidden row
+    /// already holds, and the two would then sort against each other arbitrarily.
+    private func nextSortOrder(after items: [TodoItem]) -> Int {
+        guard let day = items.first?.date else { return 0 }
+        return todos
+            .filter { DateHelpers.sameDay($0.date, day) }
+            .map(\.sortOrder)
+            .max()
+            .map { $0 + 1 } ?? 0
     }
 
     private func delete(_ todo: TodoItem) {

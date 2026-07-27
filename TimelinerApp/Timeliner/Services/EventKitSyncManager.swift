@@ -150,6 +150,37 @@ final class EventKitSyncManager: ObservableObject {
         }
     }
 
+    /// Pushes a title and a due date back to the reminder a todo came from.
+    ///
+    /// Only the two fields Timeliner lets anyone change. Everything else on an
+    /// `EKReminder` — its list, its alarms, its recurrence — belongs to the app that
+    /// owns it, and writing a whole reminder back from a model that never held those
+    /// fields would erase them.
+    func updateReminder(identifier: String, title: String, dueDate: Date) async -> Bool {
+        guard await ensureReminderAccess() else { return false }
+        guard let reminder = eventStore.calendarItem(withIdentifier: identifier) as? EKReminder else {
+            statusMessage = "Apple 미리알림에서 항목을 찾을 수 없습니다. 다시 가져오기를 실행하세요."
+            return false
+        }
+
+        reminder.title = title
+        // Day-only, to match what a todo actually carries. Keeping the hour would invent
+        // a time the user was never shown and had no way to set.
+        reminder.dueDateComponents = calendar.dateComponents(
+            [.year, .month, .day],
+            from: DateHelpers.startOfDay(dueDate)
+        )
+
+        do {
+            try eventStore.save(reminder, commit: true)
+            statusMessage = nil
+            return true
+        } catch {
+            statusMessage = error.localizedDescription
+            return false
+        }
+    }
+
     private func ensureCalendarAccess() async -> Bool {
         refreshAuthorizationStatus()
         if canSyncCalendar { return true }
