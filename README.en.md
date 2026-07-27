@@ -253,7 +253,7 @@ The stack is thin. **There are no external dependencies** — no package manager
 
 ```mermaid
 erDiagram
-    Record ||--o{ RecordPhoto : "photos (cascade)"
+    Record ||--o{ RecordPhoto : photos
 
     Record {
         UUID id PK
@@ -264,20 +264,20 @@ erDiagram
     }
     RecordPhoto {
         UUID id PK
-        Data data "externalStorage"
+        Data data
         Int sortOrder
     }
     Schedule {
         UUID id PK
         Date date
-        String timeString "nullable"
-        String endTimeString "nullable"
+        String timeString
+        String endTimeString
         String text
-        String calendarName "nullable"
-        String locationText "nullable"
+        String calendarName
+        String locationText
         String colorThemeRaw
         String iconName
-        String calendarEventIdentifier "EventKit origin"
+        String calendarEventIdentifier
     }
     TodoItem {
         UUID id PK
@@ -285,10 +285,20 @@ erDiagram
         String text
         Bool completed
         Int sortOrder
-        String reminderIdentifier "EventKit origin"
-        Date completedAt "nullable"
+        String reminderIdentifier
+        Date completedAt
     }
 ```
+
+What the diagram leaves out:
+
+| | |
+|---|---|
+| `RecordPhoto.data` | `.externalStorage` — image bytes live outside the store row |
+| `Record.photos` | Delete rule `.cascade`; ordering is done explicitly via `sortOrder`, since relationships come back unordered |
+| `Schedule.calendarEventIdentifier` · `TodoItem.reminderIdentifier` | The key back to the EventKit original — how a vanished source is found and cleaned up |
+| `TodoItem.completedAt` | When it was ticked off; cleared again if un-ticked, and read by the timeline to relocate the row |
+| Nullable | `Schedule`'s time, end time, calendar name and location; `TodoItem.completedAt` |
 
 > **Why photos are their own entity**
 > A `[Data]` on `Record` would be stored by SwiftData as a **single encoded value**, which puts

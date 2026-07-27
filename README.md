@@ -250,7 +250,7 @@ graph TD
 
 ```mermaid
 erDiagram
-    Record ||--o{ RecordPhoto : "photos (cascade)"
+    Record ||--o{ RecordPhoto : photos
 
     Record {
         UUID id PK
@@ -261,20 +261,20 @@ erDiagram
     }
     RecordPhoto {
         UUID id PK
-        Data data "externalStorage"
+        Data data
         Int sortOrder
     }
     Schedule {
         UUID id PK
         Date date
-        String timeString "nullable"
-        String endTimeString "nullable"
+        String timeString
+        String endTimeString
         String text
-        String calendarName "nullable"
-        String locationText "nullable"
+        String calendarName
+        String locationText
         String colorThemeRaw
         String iconName
-        String calendarEventIdentifier "EventKit 원본"
+        String calendarEventIdentifier
     }
     TodoItem {
         UUID id PK
@@ -282,10 +282,20 @@ erDiagram
         String text
         Bool completed
         Int sortOrder
-        String reminderIdentifier "EventKit 원본"
-        Date completedAt "nullable"
+        String reminderIdentifier
+        Date completedAt
     }
 ```
+
+다이어그램이 담지 못한 것들:
+
+| | |
+|---|---|
+| `RecordPhoto.data` | `.externalStorage` — 이미지 바이트는 저장소 행 바깥에 둡니다 |
+| `Record.photos` | 삭제 규칙 `.cascade`, 정렬은 `sortOrder`로 직접 (관계는 순서 없이 돌아옵니다) |
+| `Schedule.calendarEventIdentifier` · `TodoItem.reminderIdentifier` | EventKit 원본을 가리키는 열쇠. 원본이 사라지면 이걸로 찾아 정리합니다 |
+| `TodoItem.completedAt` | 체크한 순간. 해제하면 다시 비워지고, 타임라인이 이걸 읽어 자리를 옮깁니다 |
+| nullable | `Schedule`의 시각·종료 시각·캘린더 이름·장소, `TodoItem.completedAt` |
 
 > **사진이 왜 별도 엔티티인가**
 > `Record`에 `[Data]`를 두면 SwiftData는 배열 전체를 **하나의 인코딩된 값**으로 저장합니다.
