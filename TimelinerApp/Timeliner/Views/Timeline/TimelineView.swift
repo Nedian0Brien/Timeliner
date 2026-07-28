@@ -1608,6 +1608,51 @@ struct TimelineTabView: View {
             .offset(x: rail.lineLeadingX)
     }
 
+    /// "27분 뒤 · 팀 주간 미팅", or nil when nothing is coming.
+    ///
+    /// Only schedules that have not started yet. One already running is not something you
+    /// are waiting for, and its card already carries a progress bar and its own "남음";
+    /// saying it twice in two different senses of "remaining" is worse than saying it
+    /// once. All-day entries are out for a simpler reason — they have no start moment to
+    /// count down to.
+    ///
+    /// Crossing midnight is free now that `startAt` is a real moment. Back when it was
+    /// minutes-past-a-string, "the next one" could only ever mean "the next one today".
+    private var nextScheduleCountdown: String? {
+        let now = liveDate
+        let next = schedules
+            .compactMap { schedule -> (Date, String)? in
+                guard !schedule.isAllDay, let start = schedule.startAt, start > now else { return nil }
+                return (start, schedule.text)
+            }
+            .min { $0.0 < $1.0 }
+
+        guard let (start, title) = next else { return nil }
+        return "\(Self.waitLabel(from: now, to: start)) · \(title)"
+    }
+
+    /// How long until then, at the coarsest granularity that is still honest.
+    ///
+    /// Minutes stop being useful somewhere past a day: "1,847분 뒤" is a number nobody
+    /// converts, and the answer someone actually wants that far out is "not today".
+    private static func waitLabel(from now: Date, to start: Date) -> String {
+        let seconds = start.timeIntervalSince(now)
+        if seconds < 60 { return "곧" }
+
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return "\(minutes)분 뒤" }
+        if minutes < 60 * 24 { return "\(DateHelpers.koreanDuration(minutes: minutes)) 뒤" }
+
+        // Counted in calendar days rather than 24-hour blocks, so an event tomorrow
+        // morning reads as "1일 뒤" whether it is 20 hours away or 30.
+        let days = DateHelpers.calendar.dateComponents(
+            [.day],
+            from: DateHelpers.startOfDay(now),
+            to: DateHelpers.startOfDay(start)
+        ).day ?? 1
+        return "\(max(1, days))일 뒤"
+    }
+
     private var currentTimeMarker: some View {
         HStack(spacing: 0) {
             ZStack {
@@ -1645,6 +1690,16 @@ struct TimelineTabView: View {
                     Rectangle()
                         .fill(Color.accentColor.opacity(0.38))
                         .frame(height: 1.5)
+                    if let countdown = nextScheduleCountdown {
+                        Text(countdown)
+                            .font(.caption2.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.accentColor.opacity(0.85))
+                            .lineLimit(1)
+                            // The rule is the one part with nothing to say, so it is what
+                            // gives way when the title is long.
+                            .layoutPriority(1)
+                    }
                 }
             }
             .padding(.leading, cardGap)
