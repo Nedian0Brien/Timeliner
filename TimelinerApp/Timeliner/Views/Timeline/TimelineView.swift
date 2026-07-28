@@ -1703,10 +1703,13 @@ struct TimelineTabView: View {
                 // width, and a long title left the rule as a stub — the one element whose
                 // whole job is to read as a line across the day.
                 if let countdown = nextScheduleCountdown {
+                    // Plain text, not the marker's red. Red is what says "you are here";
+                    // this line only says what is next, and colouring it the same made
+                    // two different claims share one voice.
                     Text(countdown)
                         .font(.caption2.weight(.semibold))
                         .monospacedDigit()
-                        .foregroundStyle(nowTint.opacity(0.85))
+                        .foregroundStyle(TimelinerDesign.muted(for: scheme))
                         .lineLimit(1)
                 }
             }
