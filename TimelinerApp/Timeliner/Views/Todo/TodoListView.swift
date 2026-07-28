@@ -79,7 +79,7 @@ struct TodoListView: View {
             ForEach(grouped, id: \.0) { date, items in
                 Section {
                     ForEach(items) { todo in
-                        TodoRowView(todo: todo)
+                        TodoRowView(todo: todo, showsReorderHandle: true)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                             .glassCard(cornerRadius: 16)

@@ -8,6 +8,9 @@ struct TodoRowView: View {
     @State private var isUpdating = false
     @State private var errorMessage: String?
     @State private var editing = false
+    /// Shown only where a drag actually reorders something — the todo list. The timeline
+    /// and the calendar draw the same row with no `onMove` behind it.
+    var showsReorderHandle = false
 
     // The row carries two actions, so it is two buttons rather than one. Ticking a todo
     // off and opening it to change the wording are both things you reach for by tapping
@@ -40,7 +43,10 @@ struct TodoRowView: View {
             Button { editing = true } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(todo.text)
-                        .font(.body)
+                        // Matches a record's body. The two sit on the same rail a few
+                        // points apart, and a todo set two sizes larger read as a
+                        // heading over the records under it rather than a sibling.
+                        .font(.subheadline)
                         .foregroundStyle(todo.completed ? .secondary : .primary)
                         .strikethrough(todo.completed)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,6 +62,16 @@ struct TodoRowView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(todo.text) 수정")
             .accessibilityHint("할 일의 내용과 날짜를 바꿉니다.")
+
+            if showsReorderHandle {
+                // Drawn, not wired: the drag is `List`'s own, started by a long press
+                // anywhere on the row including here. Without the glyph the gesture was
+                // there but nothing said so, which is the same as not having it.
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.vertical, 2)
         .sheet(isPresented: $editing) {
@@ -130,7 +146,7 @@ struct AddTodoRow: View {
                 .opacity(0.7)
 
             TextField("새로운 할 일", text: $text)
-                .font(.body)
+                .font(.subheadline)
                 .submitLabel(.done)
                 .focused($focused)
                 .onSubmit(commit)
