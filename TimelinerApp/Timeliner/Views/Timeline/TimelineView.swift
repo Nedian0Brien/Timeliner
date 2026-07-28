@@ -1656,7 +1656,9 @@ struct TimelineTabView: View {
     private var nowTint: Color { TimelinerDesign.now(for: scheme) }
 
     private var currentTimeMarker: some View {
-        HStack(spacing: 0) {
+        // Top-aligned rather than centred: the marker belongs to the "지금" line, and
+        // centring would drift it down between that line and the countdown under it.
+        HStack(alignment: .top, spacing: 0) {
             ZStack {
                 Circle()
                     .fill(nowTint.opacity(0.22))
@@ -1678,30 +1680,34 @@ struct TimelineTabView: View {
             }
             .frame(width: railWidth, height: timeLineHeight)
 
-            // Same shape as every other row — time first, then what it is — so the now
-            // marker sits in the column of times rather than beside it.
-            timeLine {
-                HStack(spacing: 8) {
-                    timeText(
-                        DateHelpers.format24Hour(from: liveDate),
-                        tint: nowTint
-                    )
-                    Text("지금")
-                        .font(.caption.bold())
-                        .foregroundStyle(nowTint)
-                    Rectangle()
-                        .fill(nowTint.opacity(0.38))
-                        .frame(height: 1.5)
-                    if let countdown = nextScheduleCountdown {
-                        Text(countdown)
-                            .font(.caption2.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(nowTint.opacity(0.85))
-                            .lineLimit(1)
-                            // The rule is the one part with nothing to say, so it is what
-                            // gives way when the title is long.
-                            .layoutPriority(1)
+            VStack(alignment: .leading, spacing: 3) {
+                // Same shape as every other row — time first, then what it is — so the now
+                // marker sits in the column of times rather than beside it.
+                timeLine {
+                    HStack(spacing: 8) {
+                        timeText(
+                            DateHelpers.format24Hour(from: liveDate),
+                            tint: nowTint
+                        )
+                        Text("지금")
+                            .font(.caption.bold())
+                            .foregroundStyle(nowTint)
+                        Rectangle()
+                            .fill(nowTint.opacity(0.38))
+                            .frame(height: 1.5)
                     }
+                }
+
+                // On its own line under the marker rather than trailing the rule. Sharing
+                // the row meant the countdown and the line were competing for the same
+                // width, and a long title left the rule as a stub — the one element whose
+                // whole job is to read as a line across the day.
+                if let countdown = nextScheduleCountdown {
+                    Text(countdown)
+                        .font(.caption2.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(nowTint.opacity(0.85))
+                        .lineLimit(1)
                 }
             }
             .padding(.leading, cardGap)
