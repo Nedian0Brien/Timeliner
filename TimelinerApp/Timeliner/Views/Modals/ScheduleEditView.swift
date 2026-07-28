@@ -55,11 +55,11 @@ struct ScheduleEditView: View {
         switch mode {
         case .edit(let schedule):
             let day = DateHelpers.startOfDay(schedule.date)
-            let startMoment = schedule.startMoment ?? Self.defaultStart(on: day)
+            let startMoment = schedule.startAt ?? Self.defaultStart(on: day)
             _title = State(initialValue: schedule.text)
             _isAllDay = State(initialValue: schedule.isAllDay)
             _start = State(initialValue: startMoment)
-            _end = State(initialValue: schedule.endMoment ?? startMoment.addingTimeInterval(3600))
+            _end = State(initialValue: schedule.endAt ?? startMoment.addingTimeInterval(3600))
             _location = State(initialValue: schedule.locationText ?? "")
             _notes = State(initialValue: schedule.notes ?? "")
             _urlString = State(initialValue: schedule.urlString ?? "")
@@ -297,8 +297,8 @@ struct ScheduleEditView: View {
         schedule.date = day
         schedule.text = trimmedTitle
         schedule.isAllDay = isAllDay
-        schedule.timeString = isAllDay ? nil : DateHelpers.format24Hour(from: start)
-        schedule.endTimeString = isAllDay ? nil : DateHelpers.format24Hour(from: end)
+        schedule.startAt = isAllDay ? nil : start
+        schedule.endAt = isAllDay ? nil : end
         schedule.locationText = location.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         schedule.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         schedule.urlString = urlString.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty

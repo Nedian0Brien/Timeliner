@@ -479,11 +479,3 @@ struct RecordInputAccessory: View {
 final class PillFrameBox {
     var rect: CGRect = .zero
 }
-
-enum RecordDraftFormatter {
-    static func storedTime(for date: Date) -> String {
-        let components = DateHelpers.calendar.dateComponents([.hour, .minute], from: date)
-        let hhmm = String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
-        return DateHelpers.format12Hour(fromHHmm: hhmm)
-    }
-}

@@ -460,8 +460,8 @@ final class EventKitSyncManager: ObservableObject {
     private func makeSchedule(from event: EKEvent, identifier: String) -> Schedule {
         Schedule(
             date: DateHelpers.startOfDay(event.startDate),
-            timeString: event.isAllDay ? nil : timeString(from: event.startDate),
-            endTimeString: event.isAllDay ? nil : timeString(from: event.endDate),
+            startAt: event.isAllDay ? nil : event.startDate,
+            endAt: event.isAllDay ? nil : event.endDate,
             text: event.title,
             calendarName: event.calendar?.title,
             locationText: event.location,
@@ -474,8 +474,8 @@ final class EventKitSyncManager: ObservableObject {
 
     private func update(_ schedule: Schedule, with event: EKEvent) {
         schedule.date = DateHelpers.startOfDay(event.startDate)
-        schedule.timeString = event.isAllDay ? nil : timeString(from: event.startDate)
-        schedule.endTimeString = event.isAllDay ? nil : timeString(from: event.endDate)
+        schedule.startAt = event.isAllDay ? nil : event.startDate
+        schedule.endAt = event.isAllDay ? nil : event.endDate
         schedule.text = event.title
         schedule.calendarName = event.calendar?.title
         schedule.locationText = event.location
@@ -512,12 +512,6 @@ final class EventKitSyncManager: ObservableObject {
             result[day] = max(result[day, default: 0], todo.sortOrder + 1)
         }
         return result
-    }
-
-    private func timeString(from date: Date) -> String {
-        let components = calendar.dateComponents([.hour, .minute], from: date)
-        let hhmm = String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
-        return DateHelpers.format12Hour(fromHHmm: hhmm)
     }
 
     private func reminders(from startDate: Date, to endDate: Date) async -> [EKReminder] {

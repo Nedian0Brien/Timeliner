@@ -128,8 +128,8 @@ final class NotificationScheduler: NSObject, ObservableObject {
         var parts: [String] = []
         if schedule.isAllDay {
             parts.append("종일")
-        } else if let timeString = schedule.timeString {
-            parts.append(DateHelpers.format12Hour(fromHHmm: DateHelpers.format24Hour(from: timeString)))
+        } else if let startText = schedule.startText {
+            parts.append(startText)
         }
         if let location = schedule.locationText, !location.isEmpty { parts.append(location) }
         return parts.joined(separator: " · ")

@@ -131,7 +131,7 @@ struct SearchView: View {
                             HStack {
                                 Text(DateHelpers.koreanDateLabel(record.date))
                                 Text("·")
-                                Text(record.timeString)
+                                Text(record.timeText)
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)

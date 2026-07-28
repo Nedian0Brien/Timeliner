@@ -360,7 +360,7 @@ struct CalendarView: View {
 
     private var selectedDaySchedules: [Schedule] {
         allSchedules.filter { cal.isDate($0.date, inSameDayAs: selectedDate) }
-            .sorted { sortableMinutes($0.timeString) < sortableMinutes($1.timeString) }
+            .sorted { ($0.startMinutes ?? -1) < ($1.startMinutes ?? -1) }
     }
 
     private var selectedDayTodos: [TodoItem] {
@@ -368,8 +368,4 @@ struct CalendarView: View {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    private func sortableMinutes(_ str: String?) -> Int {
-        guard let s = str, !s.isEmpty else { return -1 }
-        return DateHelpers.minutesSinceMidnight(from: s)
-    }
 }

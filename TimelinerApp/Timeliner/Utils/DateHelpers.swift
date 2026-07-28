@@ -36,7 +36,24 @@ enum DateHelpers {
         return "\(comps.year ?? 0)년 \(comps.month ?? 0)월"
     }
 
-    /// "06:30 AM" from "HH:mm"
+    /// The moment `hour:minute` falls on `day`.
+    ///
+    /// Returns `day` itself if the calendar cannot build it — which happens at a DST
+    /// spring-forward, where the hour genuinely does not exist. Midnight of the right day
+    /// is a better answer there than a `nil` every caller would have to invent one for.
+    static func moment(hour: Int, minute: Int, on day: Date) -> Date {
+        calendar.date(bySettingHour: hour, minute: minute, second: 0, of: startOfDay(day))
+            ?? startOfDay(day)
+    }
+
+    /// The moment `"09:30"` falls on `day`.
+    static func moment(hhmm: String, on day: Date) -> Date {
+        let pieces = hhmm.split(separator: ":")
+        let hour = pieces.count == 2 ? Int(pieces[0]) ?? 0 : 0
+        let minute = pieces.count == 2 ? Int(pieces[1]) ?? 0 : 0
+        return moment(hour: hour, minute: minute, on: day)
+    }
+
     static func format12Hour(fromHHmm input: String) -> String {
         let parts = input.split(separator: ":")
         guard parts.count == 2,
@@ -48,59 +65,7 @@ enum DateHelpers {
         return String(format: "%02d:%02d %@", hour12, m, ampm)
     }
 
-    /// "HH:mm" of current time
-    static func currentHHmm() -> String {
-        let now = Date()
-        let comps = calendar.dateComponents([.hour, .minute], from: now)
-        return String(format: "%02d:%02d", comps.hour ?? 0, comps.minute ?? 0)
-    }
-
-    /// "06:30 AM" of current time
-    static func currentTime12() -> String {
-        format12Hour(fromHHmm: currentHHmm())
-    }
-
-    static func format24Hour(from storedTime: String) -> String {
-        let minutes = minutesSinceMidnight(from: storedTime)
-        return String(format: "%02d:%02d", minutes / 60, minutes % 60)
-    }
-
-    static func addingMinutes(_ minutes: Int, to storedTime: String) -> String {
-        let total = (minutesSinceMidnight(from: storedTime) + minutes + 1440) % 1440
-        return format12Hour(fromHHmm: String(format: "%02d:%02d", total / 60, total % 60))
-    }
-
-    /// Returns minutes since midnight for either a 12-hour or 24-hour time string.
-    static func minutesSinceMidnight(from time12: String) -> Int {
-        let pieces = time12.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ", omittingEmptySubsequences: true)
-        if pieces.count == 1 {
-            let timePieces = pieces[0].split(separator: ":", omittingEmptySubsequences: false)
-            guard timePieces.count == 2,
-                  let hour = Int(timePieces[0]),
-                  let minute = Int(timePieces[1]),
-                  (0..<24).contains(hour),
-                  (0..<60).contains(minute) else { return 0 }
-            return hour * 60 + minute
-        }
-
-        guard pieces.count == 2 else { return 0 }
-
-        let timePieces = pieces[0].split(separator: ":", omittingEmptySubsequences: false)
-        guard timePieces.count == 2,
-              var hour = Int(timePieces[0]),
-              let minute = Int(timePieces[1]) else { return 0 }
-
-        let ampm = pieces[1].uppercased()
-        guard ampm == "AM" || ampm == "PM" else { return 0 }
-
-        if ampm == "PM" && hour < 12 { hour += 12 }
-        if ampm == "AM" && hour == 12 { hour = 0 }
-        return hour * 60 + minute
-    }
-
-    /// "09:05" from a date. The stored-string helpers above can't serve todos, which
-    /// carry real timestamps rather than a time field.
+    /// "09:05" from a date.
     static func format24Hour(from date: Date) -> String {
         let comps = calendar.dateComponents([.hour, .minute], from: date)
         return String(format: "%02d:%02d", comps.hour ?? 0, comps.minute ?? 0)

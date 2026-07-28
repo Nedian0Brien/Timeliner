@@ -109,8 +109,7 @@ enum SeedData {
         return entries.map { offset, hour, minute, text in
             let moment = dayOffset(offset, hour: hour, minute: minute)
             return Record(
-                date: moment,
-                timeString: DateHelpers.format12Hour(fromHHmm: String(format: "%02d:%02d", hour, minute)),
+                occurredAt: moment,
                 text: text,
                 createdAt: moment
             )
@@ -128,10 +127,11 @@ enum SeedData {
         return entries.map { offset, hour, minute, text, calendar, theme, icon in
             let start = String(format: "%02d:%02d", hour, minute)
             let end = String(format: "%02d:%02d", hour + 1, minute)
+            let day = dayOffset(offset, hour: 0, minute: 0)
             return Schedule(
-                date: dayOffset(offset, hour: hour, minute: minute),
-                timeString: DateHelpers.format12Hour(fromHHmm: start),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: end),
+                date: DateHelpers.startOfDay(day),
+                startAt: DateHelpers.moment(hhmm: start, on: day),
+                endAt: DateHelpers.moment(hhmm: end, on: day),
                 text: text,
                 calendarName: calendar,
                 colorTheme: theme,
@@ -146,9 +146,9 @@ enum SeedData {
     private static var upcomingSchedules: [Schedule] {
         [
             Schedule(
-                date: dayOffset(1, hour: 11, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "11:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "12:00"),
+                date: DateHelpers.startOfDay(dayOffset(1, hour: 11, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "11:00", on: dayOffset(1, hour: 11, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "12:00", on: dayOffset(1, hour: 11, minute: 0)),
                 text: "스프린트 회고",
                 calendarName: "업무",
                 locationText: "회의실 A",
@@ -157,9 +157,9 @@ enum SeedData {
                 createdAt: Date()
             ),
             Schedule(
-                date: dayOffset(1, hour: 19, minute: 30),
-                timeString: DateHelpers.format12Hour(fromHHmm: "19:30"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "20:30"),
+                date: DateHelpers.startOfDay(dayOffset(1, hour: 19, minute: 30)),
+                startAt: DateHelpers.moment(hhmm: "19:30", on: dayOffset(1, hour: 19, minute: 30)),
+                endAt: DateHelpers.moment(hhmm: "20:30", on: dayOffset(1, hour: 19, minute: 30)),
                 text: "한강 러닝",
                 calendarName: "운동",
                 locationText: "뚝섬한강공원",
@@ -168,9 +168,9 @@ enum SeedData {
                 createdAt: Date()
             ),
             Schedule(
-                date: dayOffset(2, hour: 9, minute: 30),
-                timeString: DateHelpers.format12Hour(fromHHmm: "09:30"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "11:30"),
+                date: DateHelpers.startOfDay(dayOffset(2, hour: 9, minute: 30)),
+                startAt: DateHelpers.moment(hhmm: "09:30", on: dayOffset(2, hour: 9, minute: 30)),
+                endAt: DateHelpers.moment(hhmm: "11:30", on: dayOffset(2, hour: 9, minute: 30)),
                 text: "건강검진",
                 calendarName: "개인",
                 locationText: "서울건강검진센터",
@@ -179,9 +179,9 @@ enum SeedData {
                 createdAt: Date()
             ),
             Schedule(
-                date: dayOffset(3, hour: 14, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "14:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "15:30"),
+                date: DateHelpers.startOfDay(dayOffset(3, hour: 14, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "14:00", on: dayOffset(3, hour: 14, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "15:30", on: dayOffset(3, hour: 14, minute: 0)),
                 text: "프로젝트 중간 공유",
                 calendarName: "업무",
                 locationText: "온라인",
@@ -190,9 +190,9 @@ enum SeedData {
                 createdAt: Date()
             ),
             Schedule(
-                date: dayOffset(5, hour: 18, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "18:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "20:00"),
+                date: DateHelpers.startOfDay(dayOffset(5, hour: 18, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "18:00", on: dayOffset(5, hour: 18, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "20:00", on: dayOffset(5, hour: 18, minute: 0)),
                 text: upcomingSentinel,
                 calendarName: "가족",
                 locationText: "본가",
@@ -201,8 +201,8 @@ enum SeedData {
                 createdAt: Date()
             ),
             Schedule(
-                date: dayOffset(8, hour: 10, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "10:00"),
+                date: DateHelpers.startOfDay(dayOffset(8, hour: 10, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "10:00", on: dayOffset(8, hour: 10, minute: 0)),
                 text: "도서관 대출 반납",
                 calendarName: "개인",
                 locationText: "시립도서관",
@@ -233,38 +233,32 @@ enum SeedData {
     private static var sampleRecords: [Record] {
         [
             Record(
-                date: dayOffset(-2, hour: 21, minute: 20),
-                timeString: DateHelpers.format12Hour(fromHHmm: "21:20"),
+                occurredAt: dayOffset(-2, hour: 21, minute: 20),
                 text: "집에 돌아와서 빨래를 돌리고 침대 시트를 갈았다. 별일 아닌데 방이 조금 정돈되니까 마음도 같이 가벼워졌다.",
                 createdAt: dayOffset(-2, hour: 21, minute: 20)
             ),
             Record(
-                date: dayOffset(-1, hour: 8, minute: 35),
-                timeString: DateHelpers.format12Hour(fromHHmm: "08:35"),
+                occurredAt: dayOffset(-1, hour: 8, minute: 35),
                 text: "출근길에 새로 생긴 카페에서 라떼를 샀다. 생각보다 덜 달고 고소해서 다음에는 따뜻한 걸로 마셔봐야겠다.",
                 createdAt: dayOffset(-1, hour: 8, minute: 35)
             ),
             Record(
-                date: dayOffset(0, hour: 9, minute: 12),
-                timeString: DateHelpers.format12Hour(fromHHmm: "09:12"),
+                occurredAt: dayOffset(0, hour: 9, minute: 12),
                 text: "아침에 책상 위 영수증을 정리했다. 미뤄둔 일을 하나 끝냈을 뿐인데 하루가 조금 덜 복잡하게 시작되는 느낌.",
                 createdAt: dayOffset(0, hour: 9, minute: 12)
             ),
             Record(
-                date: dayOffset(0, hour: 11, minute: 48),
-                timeString: DateHelpers.format12Hour(fromHHmm: "11:48"),
+                occurredAt: dayOffset(0, hour: 11, minute: 48),
                 text: "엄마가 보내준 김치찌개 사진을 보고 점심 메뉴가 바로 정해졌다. 오늘 저녁에는 집에 있는 두부도 넣어서 끓여야지.",
                 createdAt: dayOffset(0, hour: 11, minute: 48)
             ),
             Record(
-                date: dayOffset(0, hour: 15, minute: 5),
-                timeString: DateHelpers.format12Hour(fromHHmm: "15:05"),
+                occurredAt: dayOffset(0, hour: 15, minute: 5),
                 text: "오후에 잠깐 집중이 끊겨서 10분 정도 밖을 걸었다. 돌아오니까 머리가 맑아져서 남은 일도 금방 정리됐다.",
                 createdAt: dayOffset(0, hour: 15, minute: 5)
             ),
             Record(
-                date: dayOffset(1, hour: 10, minute: 20),
-                timeString: DateHelpers.format12Hour(fromHHmm: "10:20"),
+                occurredAt: dayOffset(1, hour: 10, minute: 20),
                 text: "내일 오전에는 은행 앱에서 자동이체 내역을 확인해야 한다. 지난달보다 고정 지출이 조금 늘어난 것 같아서 한번 봐두기.",
                 createdAt: dayOffset(1, hour: 10, minute: 20)
             )
@@ -274,9 +268,9 @@ enum SeedData {
     private static var sampleSchedules: [Schedule] {
         [
             Schedule(
-                date: dayOffset(-1, hour: 14, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "14:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "15:00"),
+                date: DateHelpers.startOfDay(dayOffset(-1, hour: 14, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "14:00", on: dayOffset(-1, hour: 14, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "15:00", on: dayOffset(-1, hour: 14, minute: 0)),
                 text: "치과 정기 검진",
                 calendarName: "개인",
                 locationText: "연세봄치과",
@@ -285,9 +279,9 @@ enum SeedData {
                 createdAt: dayOffset(-1, hour: 13, minute: 30)
             ),
             Schedule(
-                date: dayOffset(0, hour: 10, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "10:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "11:00"),
+                date: DateHelpers.startOfDay(dayOffset(0, hour: 10, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "10:00", on: dayOffset(0, hour: 10, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "11:00", on: dayOffset(0, hour: 10, minute: 0)),
                 text: "팀 주간 미팅",
                 calendarName: "업무",
                 locationText: "회의실 B",
@@ -296,9 +290,9 @@ enum SeedData {
                 createdAt: dayOffset(0, hour: 8, minute: 50)
             ),
             Schedule(
-                date: dayOffset(0, hour: 13, minute: 30),
-                timeString: DateHelpers.format12Hour(fromHHmm: "13:30"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "14:30"),
+                date: DateHelpers.startOfDay(dayOffset(0, hour: 13, minute: 30)),
+                startAt: DateHelpers.moment(hhmm: "13:30", on: dayOffset(0, hour: 13, minute: 30)),
+                endAt: DateHelpers.moment(hhmm: "14:30", on: dayOffset(0, hour: 13, minute: 30)),
                 text: "민지랑 점심",
                 calendarName: "개인",
                 locationText: "을지로",
@@ -307,9 +301,9 @@ enum SeedData {
                 createdAt: dayOffset(0, hour: 8, minute: 55)
             ),
             Schedule(
-                date: dayOffset(1, hour: 16, minute: 0),
-                timeString: DateHelpers.format12Hour(fromHHmm: "16:00"),
-                endTimeString: DateHelpers.format12Hour(fromHHmm: "17:00"),
+                date: DateHelpers.startOfDay(dayOffset(1, hour: 16, minute: 0)),
+                startAt: DateHelpers.moment(hhmm: "16:00", on: dayOffset(1, hour: 16, minute: 0)),
+                endAt: DateHelpers.moment(hhmm: "17:00", on: dayOffset(1, hour: 16, minute: 0)),
                 text: "요가 수업",
                 calendarName: "운동",
                 locationText: "마루 스튜디오",

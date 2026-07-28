@@ -397,9 +397,9 @@ private enum TimelineRow: Identifiable {
     var sortKey: Int {
         switch self {
         case .schedule(let schedule, _):
-            return schedule.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1
+            return schedule.startMinutes ?? -1
         case .record(let record):
-            return DateHelpers.minutesSinceMidnight(from: record.timeString)
+            return record.minutes
         case .todos(let todos):
             // Was pinned to a made-up 11:45. Now that a block carries a real time it
             // can take its place in the day like everything else.
@@ -411,8 +411,7 @@ private enum TimelineRow: Identifiable {
     /// a todo block is a moment, so it ends where it starts.
     var endKey: Int {
         guard case .schedule(let schedule, _) = self else { return sortKey }
-        guard let end = schedule.endTimeString.map(DateHelpers.minutesSinceMidnight),
-              end > sortKey
+        guard let end = schedule.endMinutes, end > sortKey
         else { return sortKey }
         return end
     }
@@ -854,15 +853,9 @@ struct TimelineTabView: View {
     }
 
     private func upcomingDayCard(_ group: GroupedDay) -> some View {
-        let daySchedules = group.schedules.sorted {
-            ($0.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1)
-                < ($1.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1)
-        }
+        let daySchedules = group.schedules.sorted { ($0.startMinutes ?? -1) < ($1.startMinutes ?? -1) }
         let dayTodos = group.todos.sorted { $0.sortOrder < $1.sortOrder }
-        let dayRecords = group.records.sorted {
-            DateHelpers.minutesSinceMidnight(from: $0.timeString)
-                < DateHelpers.minutesSinceMidnight(from: $1.timeString)
-        }
+        let dayRecords = group.records.sorted { $0.occurredAt < $1.occurredAt }
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
@@ -897,7 +890,7 @@ struct TimelineTabView: View {
             selectedSchedule = schedule
         } label: {
             upcomingRow(tint: pill.tint) {
-                Text(displayTime(schedule.timeString))
+                Text(schedule.startText ?? "종일")
                     .font(.caption.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(pill.tint)
@@ -940,7 +933,7 @@ struct TimelineTabView: View {
             selectedRecord = record
         } label: {
             upcomingRow(tint: TimelinerDesign.subtle(for: scheme)) {
-                Text(DateHelpers.format24Hour(from: record.timeString))
+                Text(record.timeText)
                     .font(.caption.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(TimelinerDesign.subtle(for: scheme))
@@ -1498,7 +1491,7 @@ struct TimelineTabView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 timeLine {
-                    timeText(DateHelpers.format24Hour(from: record.timeString))
+                    timeText(record.timeText)
                 }
 
                 // No longer one `Button` around the whole card: the photos inside it now
@@ -1643,7 +1636,7 @@ struct TimelineTabView: View {
             timeLine {
                 HStack(spacing: 8) {
                     timeText(
-                        DateHelpers.format24Hour(from: DateHelpers.currentTime12()),
+                        DateHelpers.format24Hour(from: liveDate),
                         tint: Color.accentColor
                     )
                     Text("지금")
@@ -1763,25 +1756,18 @@ struct TimelineTabView: View {
     }
 
     private func rows(for group: GroupedDay) -> [TimelineRow] {
-        let orderedSchedules = group.schedules.sorted {
-            ($0.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1)
-                < ($1.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1)
-        }
-        let orderedRecords = group.records.sorted {
-            DateHelpers.minutesSinceMidnight(from: $0.timeString)
-                < DateHelpers.minutesSinceMidnight(from: $1.timeString)
-        }
+        let orderedSchedules = group.schedules.sorted { ($0.startMinutes ?? -1) < ($1.startMinutes ?? -1) }
+        let orderedRecords = group.records.sorted { $0.occurredAt < $1.occurredAt }
 
         var nestedRecordIDs = Set<UUID>()
         var result: [TimelineRow] = []
 
         for schedule in orderedSchedules {
-            let start = schedule.timeString.map(DateHelpers.minutesSinceMidnight) ?? -1
-            let end = schedule.endTimeString.map(DateHelpers.minutesSinceMidnight) ?? start + 60
+            let start = schedule.startMinutes ?? -1
+            let end = schedule.endMinutes ?? start + 60
             let nested = orderedRecords.filter { record in
                 guard !nestedRecordIDs.contains(record.id) else { return false }
-                let recordTime = DateHelpers.minutesSinceMidnight(from: record.timeString)
-                return start >= 0 && recordTime >= start && recordTime <= end
+                return start >= 0 && record.minutes >= start && record.minutes <= end
             }
             nestedRecordIDs.formUnion(nested.map(\.id))
             result.append(.schedule(schedule, nestedRecords: nested))
@@ -1804,11 +1790,6 @@ struct TimelineTabView: View {
         if DateHelpers.sameDay(date, yesterday) { return "어제" }
         if DateHelpers.sameDay(date, tomorrow) { return "내일" }
         return nil
-    }
-
-    private func displayTime(_ time: String?) -> String {
-        guard let time, !time.isEmpty else { return "종일" }
-        return DateHelpers.format24Hour(from: time)
     }
 
     /// Records made during the event.
@@ -1859,7 +1840,7 @@ struct TimelineTabView: View {
                             .frame(width: 5)
 
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(DateHelpers.format24Hour(from: record.timeString))
+                                Text(record.timeText)
                                     .font(.caption2.bold())
                                     .monospacedDigit()
                                     .foregroundStyle(pill.foreground)
@@ -1913,19 +1894,19 @@ struct TimelineTabView: View {
     /// Nil unless the event is running at this minute. `liveDate` ticks every 30 seconds,
     /// so the fill and the countdown keep themselves current without any extra timer.
     private func scheduleProgress(for schedule: Schedule) -> ScheduleProgress? {
-        guard DateHelpers.sameDay(schedule.date, liveDate),
-              let stored = schedule.timeString, !stored.isEmpty,
-              let storedEnd = schedule.endTimeString, !storedEnd.isEmpty
+        guard let start = schedule.startAt, let end = schedule.endAt,
+              end > start, liveDate >= start, liveDate < end
         else { return nil }
 
-        let start = DateHelpers.minutesSinceMidnight(from: stored)
-        let end = DateHelpers.minutesSinceMidnight(from: storedEnd)
-        let now = DateHelpers.minutesSinceMidnight(from: liveDate)
-        guard end > start, now >= start, now < end else { return nil }
+        // Real moments now, so this comparison no longer has to assume both ends live on
+        // the same day as `liveDate` — an event running past midnight measures correctly.
+        let elapsed = liveDate.timeIntervalSince(start)
+        let total = end.timeIntervalSince(start)
+        let remaining = Int((total - elapsed) / 60)
 
         return ScheduleProgress(
-            fraction: Double(now - start) / Double(end - start),
-            remainingLabel: "\(DateHelpers.koreanDuration(minutes: end - now)) 남음"
+            fraction: elapsed / total,
+            remainingLabel: "\(DateHelpers.koreanDuration(minutes: remaining)) 남음"
         )
     }
 
@@ -1933,18 +1914,15 @@ struct TimelineTabView: View {
     /// entries carry a start with no end — both fall out as nil rather than being
     /// invented, so the bar is only ever labelled at ends that exist.
     private func scheduleSpan(_ schedule: Schedule) -> ScheduleSpan {
-        let start = displayTime(schedule.timeString)
-        guard let stored = schedule.timeString, !stored.isEmpty,
-              let storedEnd = schedule.endTimeString, !storedEnd.isEmpty
-        else {
+        let start = schedule.startText ?? "종일"
+        guard let startAt = schedule.startAt, let endAt = schedule.endAt else {
             return ScheduleSpan(start: start, end: nil, duration: nil)
         }
 
-        let minutes = DateHelpers.minutesSinceMidnight(from: storedEnd)
-            - DateHelpers.minutesSinceMidnight(from: stored)
+        let minutes = Int(endAt.timeIntervalSince(startAt) / 60)
         return ScheduleSpan(
             start: start,
-            end: DateHelpers.format24Hour(from: storedEnd),
+            end: schedule.endText,
             duration: minutes > 0 ? DateHelpers.koreanDuration(minutes: minutes) : nil
         )
     }
@@ -1968,7 +1946,7 @@ private struct ScheduleSearchResult: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(schedule.timeString.map(DateHelpers.format24Hour) ?? "종일")
+            Text(schedule.startText ?? "종일")
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -2007,7 +1985,7 @@ private struct RecordSearchResult: View {
             Text(record.text)
                 .font(.subheadline)
                 .lineLimit(3)
-            Text("\(DateHelpers.koreanDateLabel(record.date)) · \(DateHelpers.format24Hour(from: record.timeString))")
+            Text("\(DateHelpers.koreanDateLabel(record.date)) · \(record.timeText)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

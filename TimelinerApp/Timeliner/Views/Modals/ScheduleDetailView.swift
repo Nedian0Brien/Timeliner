@@ -8,9 +8,10 @@ struct ScheduleDetailView: View {
 
     let schedule: Schedule
 
-    /// Every record filed on this event's day. Narrowing it to the event's span is done
-    /// below rather than in the predicate, because the span lives in `timeString` as a
-    /// formatted string — there is nothing for a query to compare against.
+    /// Every record filed on this event's day, narrowed to the event's span below.
+    ///
+    /// The narrowing could be a predicate now that both sides are `Date`s, but the span
+    /// is read off the schedule at body time and a `@Query` predicate is fixed at init.
     ///
     /// It is a query rather than a value passed in so that a record added here lands in
     /// the list underneath without anything having to tell it to.
@@ -224,7 +225,7 @@ struct ScheduleDetailView: View {
             .frame(width: 7)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(DateHelpers.format24Hour(from: record.timeString))
+                Text(record.timeText)
                     .font(.caption2.bold())
                     .monospacedDigit()
                     .foregroundStyle(pill.tint)
@@ -282,11 +283,7 @@ struct ScheduleDetailView: View {
         guard !trimmed.isEmpty else { return }
 
         let moment = momentInsideSpan()
-        modelContext.insert(Record(
-            date: DateHelpers.startOfDay(schedule.date),
-            timeString: RecordDraftFormatter.storedTime(for: moment),
-            text: trimmed
-        ))
+        modelContext.insert(Record(occurredAt: moment, text: trimmed))
 
         do {
             try modelContext.save()
@@ -301,38 +298,27 @@ struct ScheduleDetailView: View {
     /// containment, so a record only belongs to this event by virtue of when it is.
     private func momentInsideSpan() -> Date {
         let day = DateHelpers.startOfDay(schedule.date)
-        let start = schedule.timeString.map(DateHelpers.minutesSinceMidnight) ?? 0
-        let end = max(start, schedule.endTimeString.map(DateHelpers.minutesSinceMidnight) ?? start)
+        let start = schedule.startAt ?? day
+        let end = max(start, schedule.endAt ?? start)
         let now = Date()
         // A day that is not today has no "now" inside it to borrow; those land on the
         // event's end so they still fall within it.
-        let reference = DateHelpers.sameDay(schedule.date, now)
-            ? DateHelpers.minutesSinceMidnight(from: now)
-            : end
-        let minute = min(max(reference, start), end)
-        return DateHelpers.calendar.date(byAdding: .minute, value: minute, to: day) ?? now
+        let reference = DateHelpers.sameDay(schedule.date, now) ? now : end
+        return min(max(reference, start), end)
     }
 
     private var nestedRecords: [Record] {
-        guard let stored = schedule.timeString, !stored.isEmpty else { return [] }
-        let start = DateHelpers.minutesSinceMidnight(from: stored)
-        let end = schedule.endTimeString.map(DateHelpers.minutesSinceMidnight) ?? start + 60
+        guard let start = schedule.startAt else { return [] }
+        let end = schedule.endAt ?? start.addingTimeInterval(3600)
 
         return dayRecords
-            .filter {
-                let minute = DateHelpers.minutesSinceMidnight(from: $0.timeString)
-                return minute >= start && minute <= end
-            }
-            .sorted {
-                DateHelpers.minutesSinceMidnight(from: $0.timeString)
-                    < DateHelpers.minutesSinceMidnight(from: $1.timeString)
-            }
+            .filter { $0.occurredAt >= start && $0.occurredAt <= end }
+            .sorted { $0.occurredAt < $1.occurredAt }
     }
 
     private var timeRange: String {
-        guard let start = schedule.timeString else { return "하루 종일" }
-        let startText = DateHelpers.format24Hour(from: start)
-        guard let end = schedule.endTimeString else { return startText }
-        return "\(startText) – \(DateHelpers.format24Hour(from: end))"
+        guard let startText = schedule.startText else { return "하루 종일" }
+        guard let endText = schedule.endText else { return startText }
+        return "\(startText) – \(endText)"
     }
 }

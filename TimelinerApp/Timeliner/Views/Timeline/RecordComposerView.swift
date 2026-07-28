@@ -489,8 +489,7 @@ struct RecordComposerView: View {
         switch draft.entryType {
         case .record:
             let record = Record(
-                date: DateHelpers.startOfDay(draft.pickedDate),
-                timeString: RecordDraftFormatter.storedTime(for: draft.pickedDate),
+                occurredAt: draft.pickedDate,
                 text: trimmed.isEmpty ? "사진" : trimmed
             )
             modelContext.insert(record)
@@ -513,8 +512,8 @@ struct RecordComposerView: View {
             let endDate = max(draft.pickedEndDate, draft.pickedDate.addingTimeInterval(3600))
             modelContext.insert(Schedule(
                 date: DateHelpers.startOfDay(draft.pickedDate),
-                timeString: RecordDraftFormatter.storedTime(for: draft.pickedDate),
-                endTimeString: RecordDraftFormatter.storedTime(for: endDate),
+                startAt: draft.pickedDate,
+                endAt: endDate,
                 text: trimmed,
                 calendarName: "타임라이너",
                 colorTheme: .blue,

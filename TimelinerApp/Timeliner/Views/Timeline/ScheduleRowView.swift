@@ -34,10 +34,10 @@ struct ScheduleRowView: View {
                 Spacer(minLength: 8)
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(schedule.timeString.map(DateHelpers.format24Hour) ?? "종일")
+                    Text(schedule.startText ?? "종일")
                         .font(.caption.bold())
-                    if let end = schedule.endTimeString {
-                        Text(DateHelpers.format24Hour(from: end))
+                    if let end = schedule.endText {
+                        Text(end)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.tertiary)
                         .monospacedDigit()

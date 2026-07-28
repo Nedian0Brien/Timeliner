@@ -168,7 +168,7 @@ struct StatisticsSection: View {
     private var timeOfDayCard: some View {
         var morning = 0, afternoon = 0, evening = 0
         for r in filteredRecords {
-            let h = DateHelpers.minutesSinceMidnight(from: r.timeString) / 60
+            let h = r.minutes / 60
             if (6..<12).contains(h) { morning += 1 }
             else if (12..<18).contains(h) { afternoon += 1 }
             else { evening += 1 }

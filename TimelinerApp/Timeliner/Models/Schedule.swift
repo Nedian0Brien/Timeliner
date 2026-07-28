@@ -10,9 +10,21 @@ enum ScheduleColorTheme: String, Codable, CaseIterable {
 @Model
 final class Schedule {
     @Attribute(.unique) var id: UUID = UUID()
+    /// Which day this belongs to, as a start of day.
+    ///
+    /// Kept alongside `startAt` rather than derived from it, because an all-day event has
+    /// no `startAt` to derive it from, and the timeline groups by day before it sorts by
+    /// anything.
     var date: Date = Date()
-    var timeString: String? = nil
-    var endTimeString: String? = nil
+    /// The moment it begins, or `nil` when it takes the whole day.
+    ///
+    /// This used to be a `"09:30 AM"` string. A string cannot be compared across a day
+    /// boundary, cannot represent an event that ends after midnight, silently became
+    /// midnight when it failed to parse, and had no time zone — so every hour it held was
+    /// a label rather than a moment.
+    var startAt: Date? = nil
+    /// The moment it ends. `nil` means nobody wrote one down, not that it never ends.
+    var endAt: Date? = nil
     var text: String = ""
     var calendarName: String? = nil
     var locationText: String? = nil
@@ -23,9 +35,9 @@ final class Schedule {
 
     /// Takes the whole day, with no hour of its own.
     ///
-    /// A flag rather than the absence of `timeString`, because those are different
-    /// things: an all-day event genuinely has no hour, while a schedule that is merely
-    /// missing one is an event someone has not finished writing down.
+    /// A flag rather than the absence of `startAt`, because those are different things:
+    /// an all-day event genuinely has no hour, while a schedule that is merely missing one
+    /// is an event someone has not finished writing down.
     var isAllDay: Bool = false
     var notes: String? = nil
     /// Kept as a string, which is what a user types and what EventKit hands back. It is
@@ -50,8 +62,8 @@ final class Schedule {
     init(
         id: UUID = UUID(),
         date: Date,
-        timeString: String? = nil,
-        endTimeString: String? = nil,
+        startAt: Date? = nil,
+        endAt: Date? = nil,
         text: String,
         calendarName: String? = nil,
         locationText: String? = nil,
@@ -67,8 +79,8 @@ final class Schedule {
     ) {
         self.id = id
         self.date = date
-        self.timeString = timeString
-        self.endTimeString = endTimeString
+        self.startAt = startAt
+        self.endAt = endAt
         self.text = text
         self.calendarName = calendarName
         self.locationText = locationText
@@ -83,21 +95,28 @@ final class Schedule {
         self.calendarIdentifier = calendarIdentifier
     }
 
-    /// The moment the schedule starts, or `nil` when it has no hour of its own.
-    var startMoment: Date? {
-        guard !isAllDay, let timeString else { return nil }
-        let minutes = DateHelpers.minutesSinceMidnight(from: timeString)
-        return DateHelpers.calendar.date(
-            byAdding: .minute, value: minutes, to: DateHelpers.startOfDay(date)
-        )
+    // MARK: - Reading the hour
+
+    /// Minutes past midnight of `date`, for ordering rows inside one day.
+    ///
+    /// The timeline sorts a day's rows against each other, and inside a day this is the
+    /// same ordering as the moments themselves. Anything comparing across days should
+    /// use `startAt` directly, which is the whole reason it is a `Date` now.
+    var startMinutes: Int? {
+        startAt.map(DateHelpers.minutesSinceMidnight(from:))
     }
 
-    var endMoment: Date? {
-        guard !isAllDay, let endTimeString else { return nil }
-        let minutes = DateHelpers.minutesSinceMidnight(from: endTimeString)
-        return DateHelpers.calendar.date(
-            byAdding: .minute, value: minutes, to: DateHelpers.startOfDay(date)
-        )
+    var endMinutes: Int? {
+        endAt.map(DateHelpers.minutesSinceMidnight(from:))
+    }
+
+    /// "09:30", or `nil` when there is no hour to show.
+    var startText: String? {
+        startAt.map(DateHelpers.format24Hour(from:))
+    }
+
+    var endText: String? {
+        endAt.map(DateHelpers.format24Hour(from:))
     }
 
     /// When the alarm for this schedule should fire, if it has one.
@@ -106,7 +125,7 @@ final class Schedule {
     /// the morning — the same hour a todo's first alarm lands on, for the same reason.
     var alarmMoment: Date? {
         guard let alarmMinutesBefore else { return nil }
-        guard let anchor = startMoment ?? DateHelpers.calendar.date(
+        guard let anchor = startAt ?? DateHelpers.calendar.date(
             bySettingHour: 9, minute: 0, second: 0, of: DateHelpers.startOfDay(date)
         ) else { return nil }
         return DateHelpers.calendar.date(byAdding: .minute, value: -alarmMinutesBefore, to: anchor)

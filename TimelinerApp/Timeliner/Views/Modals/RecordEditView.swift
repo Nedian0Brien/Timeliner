@@ -31,7 +31,7 @@ struct RecordEditView: View {
                 HStack {
                     Label(DateHelpers.koreanDateLabel(record.date), systemImage: "calendar")
                     Text("·")
-                    Label(record.timeString, systemImage: "clock")
+                    Label(record.timeText, systemImage: "clock")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
