@@ -8,7 +8,17 @@ final class TodoItem {
     var text: String = ""
     var completed: Bool = false
     var sortOrder: Int = 0
+    /// The Apple 미리알림 item this todo is tied to, whichever direction it came from.
+    ///
+    /// Set when a reminder is imported and when Timeliner writes one out. Its presence is
+    /// what makes an edit here an edit over there, and its absence is what keeps a todo
+    /// local — there is no separate "is synced" flag, because a link either exists or
+    /// does not.
     var reminderIdentifier: String? = nil
+    /// Which list in 미리알림 holds it. Remembered so the picker can show where a todo
+    /// already lives, and so a todo written out lands where it was put rather than in
+    /// whatever list happens to be the default that day.
+    var reminderListIdentifier: String? = nil
     var createdAt: Date = Date()
     /// When this item was ticked off. Cleared again if it is un-ticked. The timeline
     /// reads it to move a finished block from when it was written down to when the work
@@ -29,6 +39,7 @@ final class TodoItem {
         completed: Bool = false,
         sortOrder: Int = 0,
         reminderIdentifier: String? = nil,
+        reminderListIdentifier: String? = nil,
         createdAt: Date = Date(),
         completedAt: Date? = nil,
         reminderAt: Date? = nil
@@ -39,6 +50,7 @@ final class TodoItem {
         self.completed = completed
         self.sortOrder = sortOrder
         self.reminderIdentifier = reminderIdentifier
+        self.reminderListIdentifier = reminderListIdentifier
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.reminderAt = reminderAt

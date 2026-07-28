@@ -1,3 +1,4 @@
+import EventKit
 import SwiftUI
 import SwiftData
 
@@ -12,6 +13,11 @@ struct TodoEditView: View {
         case create(day: Date)
     }
 
+    /// Whether the last todo saved went to 미리알림, so the next new one starts the same
+    /// way. Someone who keeps their todos in Reminders keeps all of them there, and
+    /// making that two extra taps per row is how a sync feature stops being used.
+    private static let exportDefaultKey = "todoExportsToReminders"
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @StateObject private var syncManager = EventKitSyncManager.shared
@@ -25,6 +31,9 @@ struct TodoEditView: View {
     @State private var text: String
     @State private var day: Date
     @State private var reminderAt: Date?
+    @State private var exportToReminders: Bool
+    @State private var reminderListIdentifier: String?
+    @State private var reminderLists: [EKCalendar] = []
     @State private var errorMessage: String?
     @State private var isSaving = false
     @FocusState private var focused: Bool
@@ -36,10 +45,16 @@ struct TodoEditView: View {
             _text = State(initialValue: todo.text)
             _day = State(initialValue: todo.date)
             _reminderAt = State(initialValue: todo.reminderAt)
+            // A link that already exists is what the toggle reports; the remembered
+            // default has no business overriding what this particular todo is.
+            _exportToReminders = State(initialValue: todo.reminderIdentifier != nil)
+            _reminderListIdentifier = State(initialValue: todo.reminderListIdentifier)
         case .create(let day):
             _text = State(initialValue: "")
             _day = State(initialValue: DateHelpers.startOfDay(day))
             _reminderAt = State(initialValue: nil)
+            _exportToReminders = State(initialValue: UserDefaults.standard.bool(forKey: Self.exportDefaultKey))
+            _reminderListIdentifier = State(initialValue: nil)
         }
     }
 
@@ -94,16 +109,34 @@ struct TodoEditView: View {
                     }
                 }
 
-                if isLinkedToReminders {
-                    Section {
-                        Label {
-                            Text("Apple 미리알림에도 함께 반영됩니다.")
-                        } icon: {
-                            Image(systemName: "arrow.trianglehead.2.clockwise")
+                Section {
+                    Toggle("Apple 미리알림에 저장", isOn: $exportToReminders.animation(.snappy(duration: 0.2)))
+                    if exportToReminders {
+                        if reminderLists.isEmpty {
+                            Text("쓸 수 있는 미리알림 목록이 없습니다.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("목록", selection: $reminderListIdentifier) {
+                                ForEach(reminderLists, id: \.calendarIdentifier) { list in
+                                    Label {
+                                        Text(list.title)
+                                    } icon: {
+                                        // Lists in 미리알림 are told apart by colour more
+                                        // than by name, and half of them are called some
+                                        // variant of "미리알림".
+                                        Image(systemName: "circle.fill")
+                                            .foregroundStyle(color(of: list))
+                                    }
+                                    .tag(Optional(list.calendarIdentifier))
+                                }
+                            }
                         }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                     }
+                } footer: {
+                    Text(exportToReminders
+                         ? "내용·날짜·완료 여부가 Apple 미리알림과 양쪽으로 반영됩니다. 여기서 지우면 미리알림에서도 지워집니다."
+                         : "Timeliner 안에만 남습니다.")
                 }
             }
             // The sky belongs behind the timeline, where it is telling you the hour. A
@@ -136,6 +169,14 @@ struct TodoEditView: View {
                 guard !isEditing else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focused = true }
             }
+            // Loaded only once the switch is actually on. Reading the lists is what asks
+            // for 미리알림 access, and a permission sheet has no business appearing over
+            // someone who opened this to fix a typo and will never touch the switch.
+            .task { if exportToReminders { await loadReminderLists() } }
+            .onChange(of: exportToReminders) { _, isOn in
+                guard isOn, reminderLists.isEmpty else { return }
+                Task { await loadReminderLists() }
+            }
             .alert("저장 실패", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -152,9 +193,27 @@ struct TodoEditView: View {
         return false
     }
 
-    private var isLinkedToReminders: Bool {
-        if case .edit(let todo) = mode { return todo.reminderIdentifier != nil }
-        return false
+    private var currentReminderIdentifier: String? {
+        if case .edit(let todo) = mode { return todo.reminderIdentifier }
+        return nil
+    }
+
+    /// A list's own colour, falling back to grey. `EKCalendar.cgColor` is typed as
+    /// implicitly unwrapped and is genuinely absent for some accounts.
+    private func color(of list: EKCalendar) -> Color {
+        guard let cgColor = list.cgColor else { return .secondary }
+        return Color(cgColor: cgColor)
+    }
+
+    private func loadReminderLists() async {
+        reminderLists = await syncManager.reminderLists()
+        // Also covers a list that has since been deleted or turned read-only: the picker
+        // would otherwise show nothing selected while holding an identifier that no
+        // longer resolves.
+        let known = reminderLists.contains { $0.calendarIdentifier == reminderListIdentifier }
+        if !known {
+            reminderListIdentifier = await syncManager.defaultReminderListIdentifier()
+        }
     }
 
     private var trimmedText: String {
@@ -197,70 +256,77 @@ struct TodoEditView: View {
 
     // MARK: - Saving
 
+    /// 미리알림 is written first and the local row only follows if that worked.
+    ///
+    /// The same bargain `TodoRowView` makes for completion: a local edit the source never
+    /// heard about is undone by the next import anyway, so the two are better off never
+    /// diverging in the first place.
     private func save() {
         let trimmed = trimmedText
         guard !trimmed.isEmpty, !isSaving else { return }
         let newDay = DateHelpers.startOfDay(day)
+        isSaving = true
 
-        switch mode {
-        case .create:
-            insertTodo(text: trimmed, day: newDay)
+        Task {
+            var identifier = currentReminderIdentifier
 
-        case .edit(let todo):
-            // Reminders is written first and the local row only follows if that worked.
-            // The same bargain `TodoRowView` makes for completion: a local edit that the
-            // source never heard about is undone by the next import anyway, so the two
-            // are better off never diverging in the first place.
-            guard let identifier = todo.reminderIdentifier else {
-                applyEdit(to: todo, text: trimmed, day: newDay)
-                return
-            }
-
-            isSaving = true
-            Task {
-                let pushed = await syncManager.updateReminder(
-                    identifier: identifier,
+            if exportToReminders {
+                let written = await syncManager.exportReminder(
                     title: trimmed,
-                    dueDate: newDay
+                    day: newDay,
+                    listIdentifier: reminderListIdentifier,
+                    existingIdentifier: identifier
                 )
-                isSaving = false
-                guard pushed else {
+                guard let written else {
+                    isSaving = false
                     errorMessage = syncManager.statusMessage
-                        ?? "Apple 미리알림을 수정하지 못했습니다."
+                        ?? "Apple 미리알림에 저장하지 못했습니다."
                     return
                 }
-                applyEdit(to: todo, text: trimmed, day: newDay)
+                identifier = written
+            } else if let identifier {
+                // Switched off after having been on: the copy over there is now orphaned,
+                // and leaving it behind is how one todo becomes two that drift apart.
+                await syncManager.deleteExportedReminder(identifier: identifier)
             }
+
+            UserDefaults.standard.set(exportToReminders, forKey: Self.exportDefaultKey)
+            applyLocally(
+                text: trimmed,
+                day: newDay,
+                reminderIdentifier: exportToReminders ? identifier : nil
+            )
+            isSaving = false
         }
     }
 
-    private func insertTodo(text: String, day: Date) {
-        let todo = TodoItem(
-            date: day,
-            text: text,
-            sortOrder: nextSortOrder(on: day),
-            reminderAt: reminder(on: day)
-        )
-        modelContext.insert(todo)
-
-        do {
-            try modelContext.save()
-            dismiss()
-        } catch {
-            modelContext.delete(todo)
-            modelContext.rollback()
-            errorMessage = error.localizedDescription
+    private func applyLocally(text: String, day: Date, reminderIdentifier: String?) {
+        let todo: TodoItem
+        let isNew: Bool
+        switch mode {
+        case .edit(let existing):
+            todo = existing
+            isNew = false
+        case .create:
+            todo = TodoItem(date: day, text: text, sortOrder: nextSortOrder(on: day))
+            modelContext.insert(todo)
+            isNew = true
         }
-    }
 
-    private func applyEdit(to todo: TodoItem, text: String, day: Date) {
         let previousText = todo.text
         let previousDate = todo.date
         let previousSortOrder = todo.sortOrder
         let previousReminder = todo.reminderAt
+        let previousIdentifier = todo.reminderIdentifier
+        let previousList = todo.reminderListIdentifier
 
         todo.text = text
         todo.reminderAt = reminder(on: day)
+        todo.reminderIdentifier = reminderIdentifier
+        // Cleared along with the link: a list remembered for a todo that is no longer
+        // over there would be handed straight back to the picker the next time the
+        // switch is turned on, pointing at wherever it used to live.
+        todo.reminderListIdentifier = reminderIdentifier == nil ? nil : reminderListIdentifier
         if !DateHelpers.sameDay(todo.date, day) {
             todo.date = day
             // Its old number belonged to the day it left, where it may well collide with
@@ -273,20 +339,36 @@ struct TodoEditView: View {
             try modelContext.save()
             dismiss()
         } catch {
-            todo.text = previousText
-            todo.date = previousDate
-            todo.sortOrder = previousSortOrder
-            todo.reminderAt = previousReminder
+            if isNew {
+                modelContext.delete(todo)
+            } else {
+                todo.text = previousText
+                todo.date = previousDate
+                todo.sortOrder = previousSortOrder
+                todo.reminderAt = previousReminder
+                todo.reminderIdentifier = previousIdentifier
+                todo.reminderListIdentifier = previousList
+            }
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
     }
 
+    /// Removes the todo here and, if it has one, its copy in 미리알림.
+    ///
+    /// The remote removal is fired only after the local save has gone through, and is not
+    /// waited on: a reminder that outlives its todo comes back on the next import, which
+    /// is recoverable. A todo whose reminder was deleted under a save that then failed is
+    /// not.
     private func delete(_ todo: TodoItem) {
+        let identifier = todo.reminderIdentifier
         modelContext.delete(todo)
 
         do {
             try modelContext.save()
+            if let identifier {
+                Task { await syncManager.deleteExportedReminder(identifier: identifier) }
+            }
             dismiss()
         } catch {
             modelContext.rollback()

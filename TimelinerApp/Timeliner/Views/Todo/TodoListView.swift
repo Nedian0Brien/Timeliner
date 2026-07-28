@@ -3,6 +3,7 @@ import SwiftData
 
 struct TodoListView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var syncManager = EventKitSyncManager.shared
 
     @Query(sort: [SortDescriptor(\TodoItem.date, order: .reverse),
                   SortDescriptor(\TodoItem.sortOrder, order: .forward)])
@@ -184,11 +185,18 @@ struct TodoListView: View {
         }
     }
 
+    /// Swiping a row away also removes its copy in 미리알림, matching the edit sheet's
+    /// trash button. A delete that only took locally would be undone by the next import,
+    /// which reads as the row refusing to go away.
     private func delete(_ todo: TodoItem) {
+        let reminderIdentifier = todo.reminderIdentifier
         modelContext.delete(todo)
 
         do {
             try modelContext.save()
+            if let reminderIdentifier {
+                Task { await syncManager.deleteExportedReminder(identifier: reminderIdentifier) }
+            }
         } catch {
             modelContext.rollback()
             errorMessage = error.localizedDescription

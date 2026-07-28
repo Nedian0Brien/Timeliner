@@ -150,30 +150,89 @@ final class EventKitSyncManager: ObservableObject {
         }
     }
 
-    /// Pushes a title and a due date back to the reminder a todo came from.
+    /// The 미리알림 lists a todo can actually be written into.
     ///
-    /// Only the two fields Timeliner lets anyone change. Everything else on an
-    /// `EKReminder` — its list, its alarms, its recurrence — belongs to the app that
-    /// owns it, and writing a whole reminder back from a model that never held those
-    /// fields would erase them.
-    func updateReminder(identifier: String, title: String, dueDate: Date) async -> Bool {
-        guard await ensureReminderAccess() else { return false }
-        guard let reminder = eventStore.calendarItem(withIdentifier: identifier) as? EKReminder else {
-            statusMessage = "Apple 미리알림에서 항목을 찾을 수 없습니다. 다시 가져오기를 실행하세요."
-            return false
+    /// Read-only lists — a shared list someone else owns, a subscribed one — come back
+    /// from EventKit like any other and then reject the save, so offering them would be
+    /// offering a failure.
+    func reminderLists() async -> [EKCalendar] {
+        guard await ensureReminderAccess() else { return [] }
+        return eventStore.calendars(for: .reminder)
+            .filter(\.allowsContentModifications)
+            .sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+    }
+
+    func defaultReminderListIdentifier() async -> String? {
+        guard await ensureReminderAccess() else { return nil }
+        return eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
+    }
+
+    /// Writes a todo out to Apple 미리알림, creating the reminder or updating the one it
+    /// is already linked to.
+    ///
+    /// Returns the item identifier so the caller can hold on to it. That handle is the
+    /// only thing joining the two copies; losing it turns the next save into a second
+    /// reminder rather than an edit of the first.
+    ///
+    /// Only the fields Timeliner actually models are written. A reminder's alarms, notes,
+    /// priority, subtasks and recurrence belong to whoever set them — most often the
+    /// 미리알림 app — and saving a whole reminder built from a todo would erase every one
+    /// of them. Alarms in particular are left alone on purpose: `reminderAt` already
+    /// raises Timeliner's own notification, and adding an `EKAlarm` beside it would ring
+    /// the same todo twice on the same phone.
+    func exportReminder(
+        title: String,
+        day: Date,
+        listIdentifier: String?,
+        existingIdentifier: String?
+    ) async -> String? {
+        guard await ensureReminderAccess() else { return nil }
+
+        let reminder: EKReminder
+        if let existingIdentifier,
+           let found = eventStore.calendarItem(withIdentifier: existingIdentifier) as? EKReminder {
+            reminder = found
+        } else {
+            reminder = EKReminder(eventStore: eventStore)
         }
 
+        guard let list = targetReminderList(for: listIdentifier, current: reminder.calendar) else {
+            statusMessage = "쓸 수 있는 미리알림 목록을 찾지 못했습니다."
+            return nil
+        }
+        // Assigned unconditionally rather than only when it differs: for a reminder that
+        // does not exist yet there is nothing to differ from, and for one that does,
+        // writing the same list back is a no-op.
+        reminder.calendar = list
         reminder.title = title
         // Day-only, to match what a todo actually carries. Keeping the hour would invent
         // a time the user was never shown and had no way to set.
         reminder.dueDateComponents = calendar.dateComponents(
             [.year, .month, .day],
-            from: DateHelpers.startOfDay(dueDate)
+            from: DateHelpers.startOfDay(day)
         )
 
         do {
             try eventStore.save(reminder, commit: true)
             statusMessage = nil
+            return reminder.calendarItemIdentifier
+        } catch {
+            statusMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Removes the Apple 미리알림 copy of a todo. Silent when there is nothing to remove:
+    /// a reminder already deleted over there is the state this was asking for.
+    @discardableResult
+    func deleteExportedReminder(identifier: String) async -> Bool {
+        guard await ensureReminderAccess() else { return false }
+        guard let reminder = eventStore.calendarItem(withIdentifier: identifier) as? EKReminder else {
+            return true
+        }
+
+        do {
+            try eventStore.remove(reminder, commit: true)
             return true
         } catch {
             statusMessage = error.localizedDescription
@@ -219,8 +278,13 @@ final class EventKitSyncManager: ObservableObject {
         guard await ensureCalendarAccess() else { return nil }
 
         let event: EKEvent
+        // `event(withIdentifier:)`, not `calendarItem(withIdentifier:)`: an event carries
+        // two identifiers and they are not interchangeable. The importer files a schedule
+        // under `eventIdentifier`, so that is what comes back here, and looking it up as a
+        // calendar item finds nothing — which would quietly make every save a brand new
+        // event instead of an edit of the one already there.
         if let existingEventIdentifier,
-           let found = eventStore.calendarItem(withIdentifier: existingEventIdentifier) as? EKEvent {
+           let found = eventStore.event(withIdentifier: existingEventIdentifier) {
             event = found
         } else {
             event = EKEvent(eventStore: eventStore)
@@ -260,7 +324,9 @@ final class EventKitSyncManager: ObservableObject {
         do {
             try eventStore.save(event, span: .thisEvent, commit: true)
             statusMessage = nil
-            return event.calendarItemIdentifier
+            // The same identifier the importer keys on, so the next import recognises
+            // this event as one it already has rather than importing a duplicate.
+            return event.eventIdentifier
         } catch {
             statusMessage = error.localizedDescription
             return nil
@@ -271,7 +337,7 @@ final class EventKitSyncManager: ObservableObject {
     @discardableResult
     func deleteExportedEvent(identifier: String) async -> Bool {
         guard await ensureCalendarAccess() else { return false }
-        guard let event = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent else {
+        guard let event = eventStore.event(withIdentifier: identifier) else {
             return true
         }
 
@@ -282,6 +348,19 @@ final class EventKitSyncManager: ObservableObject {
             statusMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Where a reminder should be written: the list asked for, else the one it already
+    /// sits in, else whatever 미리알림 itself would have picked.
+    private func targetReminderList(for identifier: String?, current: EKCalendar?) -> EKCalendar? {
+        if let identifier,
+           let match = eventStore.calendar(withIdentifier: identifier),
+           match.allowsContentModifications {
+            return match
+        }
+        if let current, current.allowsContentModifications { return current }
+        return eventStore.defaultCalendarForNewReminders()
+            ?? eventStore.calendars(for: .reminder).first(where: \.allowsContentModifications)
     }
 
     private func targetCalendar(for identifier: String?, current: EKCalendar?) -> EKCalendar? {
@@ -490,6 +569,7 @@ final class EventKitSyncManager: ObservableObject {
             completed: reminder.isCompleted,
             sortOrder: sortOrder,
             reminderIdentifier: reminder.calendarItemIdentifier,
+            reminderListIdentifier: reminder.calendar?.calendarIdentifier,
             createdAt: Date()
         )
     }
@@ -497,6 +577,9 @@ final class EventKitSyncManager: ObservableObject {
     private func update(_ todo: TodoItem, with reminder: EKReminder, dueDate: Date) {
         todo.date = DateHelpers.startOfDay(dueDate)
         todo.text = reminder.title
+        // Followed rather than fixed at import: a todo moved to another list in 미리알림
+        // should open on the list it is actually in, not the one it started in.
+        todo.reminderListIdentifier = reminder.calendar?.calendarIdentifier
         // Reminders carries its own completion date; fall back to now only when it is
         // newly completed here and EventKit has not supplied one.
         if todo.completed != reminder.isCompleted {
