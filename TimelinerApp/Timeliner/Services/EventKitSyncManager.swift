@@ -181,6 +181,120 @@ final class EventKitSyncManager: ObservableObject {
         }
     }
 
+    /// The calendars an event can actually be written into.
+    ///
+    /// Subscribed and delivered calendars come back from EventKit like any other but
+    /// reject writes, so offering them would be offering a save that fails.
+    func writableCalendars() async -> [EKCalendar] {
+        guard await ensureCalendarAccess() else { return [] }
+        return eventStore.calendars(for: .event)
+            .filter(\.allowsContentModifications)
+            .sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+    }
+
+    func defaultCalendarIdentifier() async -> String? {
+        guard await ensureCalendarAccess() else { return nil }
+        return eventStore.defaultCalendarForNewEvents?.calendarIdentifier
+    }
+
+    /// Writes a schedule out to Apple 캘린더, creating the event or updating the one it
+    /// already came from.
+    ///
+    /// Returns the event identifier so the caller can hold on to it — that handle is the
+    /// only thing linking the two copies, and losing it turns the next export into a
+    /// duplicate rather than an edit.
+    func exportEvent(
+        title: String,
+        isAllDay: Bool,
+        day: Date,
+        start: Date?,
+        end: Date?,
+        location: String?,
+        notes: String?,
+        url: URL?,
+        alarmMinutesBefore: Int?,
+        calendarIdentifier: String?,
+        existingEventIdentifier: String?
+    ) async -> String? {
+        guard await ensureCalendarAccess() else { return nil }
+
+        let event: EKEvent
+        if let existingEventIdentifier,
+           let found = eventStore.calendarItem(withIdentifier: existingEventIdentifier) as? EKEvent {
+            event = found
+        } else {
+            event = EKEvent(eventStore: eventStore)
+        }
+
+        guard let calendar = targetCalendar(for: calendarIdentifier, current: event.calendar) else {
+            statusMessage = "쓸 수 있는 캘린더를 찾지 못했습니다."
+            return nil
+        }
+        event.calendar = calendar
+        event.title = title
+        event.location = location
+        event.notes = notes
+        event.url = url
+        event.isAllDay = isAllDay
+
+        if isAllDay {
+            let startOfDay = DateHelpers.startOfDay(day)
+            event.startDate = startOfDay
+            event.endDate = startOfDay
+        } else {
+            let startDate = start ?? DateHelpers.startOfDay(day)
+            event.startDate = startDate
+            // EventKit rejects an end that is not after the start, and a schedule with no
+            // end written down is a schedule someone means to last an hour.
+            event.endDate = max(end ?? startDate.addingTimeInterval(3600),
+                                startDate.addingTimeInterval(60))
+        }
+
+        // Replaced rather than added to: leaving the old ones would stack a new alarm on
+        // every save.
+        for alarm in event.alarms ?? [] { event.removeAlarm(alarm) }
+        if let alarmMinutesBefore {
+            event.addAlarm(EKAlarm(relativeOffset: -Double(alarmMinutesBefore) * 60))
+        }
+
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            statusMessage = nil
+            return event.calendarItemIdentifier
+        } catch {
+            statusMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Removes the Apple 캘린더 copy of a schedule. Silent when there is nothing to remove.
+    @discardableResult
+    func deleteExportedEvent(identifier: String) async -> Bool {
+        guard await ensureCalendarAccess() else { return false }
+        guard let event = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent else {
+            return true
+        }
+
+        do {
+            try eventStore.remove(event, span: .thisEvent, commit: true)
+            return true
+        } catch {
+            statusMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private func targetCalendar(for identifier: String?, current: EKCalendar?) -> EKCalendar? {
+        if let identifier,
+           let match = eventStore.calendar(withIdentifier: identifier),
+           match.allowsContentModifications {
+            return match
+        }
+        if let current, current.allowsContentModifications { return current }
+        return eventStore.defaultCalendarForNewEvents
+            ?? eventStore.calendars(for: .event).first(where: \.allowsContentModifications)
+    }
+
     private func ensureCalendarAccess() async -> Bool {
         refreshAuthorizationStatus()
         if canSyncCalendar { return true }

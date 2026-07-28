@@ -17,6 +17,7 @@ struct ScheduleDetailView: View {
     @Query private var dayRecords: [Record]
 
     @State private var draft = ""
+    @State private var editing = false
     @State private var errorMessage: String?
     @FocusState private var inputFocused: Bool
 
@@ -49,9 +50,15 @@ struct ScheduleDetailView: View {
             .navigationTitle("일정 상세")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("수정") { editing = true }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("완료") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $editing) {
+                ScheduleEditView(mode: .edit(schedule))
             }
             .alert("저장 실패", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -107,11 +114,45 @@ struct ScheduleDetailView: View {
             if let location = schedule.locationText, !location.isEmpty {
                 Label(location, systemImage: "mappin.and.ellipse")
             }
+            if schedule.isAllDay {
+                Label("종일", systemImage: "sun.horizon")
+            }
+            if let minutes = schedule.alarmMinutesBefore {
+                Label(alarmLabel(minutes), systemImage: "bell")
+            }
+            if let notes = schedule.notes, !notes.isEmpty {
+                Label {
+                    Text(notes)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "text.alignleft")
+                }
+            }
+            if let urlString = schedule.urlString, !urlString.isEmpty {
+                if let url = URL(string: urlString.contains("://") ? urlString : "https://\(urlString)") {
+                    Link(destination: url) {
+                        Label(urlString, systemImage: "link")
+                    }
+                } else {
+                    // Still shown rather than hidden: a half-typed address the user can
+                    // see is fixable, one the sheet silently drops is not.
+                    Label(urlString, systemImage: "link")
+                }
+            }
         }
         .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .glassCard(cornerRadius: 16)
+    }
+
+    private func alarmLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 0: return "이벤트 당시 알림"
+        case ..<60: return "\(minutes)분 전 알림"
+        case 60 * 24: return "1일 전 알림"
+        default: return "\(minutes / 60)시간 전 알림"
+        }
     }
 
     // MARK: - Mini timeline

@@ -13,6 +13,7 @@ struct CalendarView: View {
     @State private var selectedDate: Date = DateHelpers.startOfDay(Date())
     @State private var selectedSchedule: Schedule? = nil
     @State private var didAutoImport = false
+    @State private var composingNew = false
     @State private var saveError: String?
 
     private var cal: Calendar { DateHelpers.calendar }
@@ -53,6 +54,17 @@ struct CalendarView: View {
                         Text("오늘").fontWeight(.semibold)
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Adds to the day being looked at, not to today — the month grid is
+                    // where you go precisely because the day you mean is not this one.
+                    Button { composingNew = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("일정 추가")
+                }
+            }
+            .sheet(isPresented: $composingNew) {
+                ScheduleEditView(mode: .create(day: selectedDate))
             }
             .sheet(item: $selectedSchedule) { schedule in
                 ScheduleDetailView(schedule: schedule)

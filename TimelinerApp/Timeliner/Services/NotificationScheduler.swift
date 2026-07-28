@@ -28,6 +28,7 @@ final class NotificationScheduler: NSObject, ObservableObject {
     private let calendar = DateHelpers.calendar
 
     private static let todoPrefix = "todo."
+    private static let schedulePrefix = "schedule."
     private static let digestPrefix = "digest."
     /// How far ahead digests are laid down.
     ///
@@ -90,11 +91,48 @@ final class NotificationScheduler: NSObject, ObservableObject {
         let pending = await center.pendingNotificationRequests()
         let ours = pending
             .map(\.identifier)
-            .filter { $0.hasPrefix(Self.todoPrefix) || $0.hasPrefix(Self.digestPrefix) }
+            .filter { $0.hasPrefix(Self.todoPrefix) || $0.hasPrefix(Self.schedulePrefix) || $0.hasPrefix(Self.digestPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: ours)
 
         await scheduleTodoReminders(todos)
+        await scheduleScheduleAlarms(schedules)
         await scheduleDigests(todos: todos, schedules: schedules)
+    }
+
+    private func scheduleScheduleAlarms(_ schedules: [Schedule]) async {
+        let now = Date()
+
+        for schedule in schedules {
+            // An event exported to Apple 캘린더 carries its own alarm over there, and
+            // EventKit will raise it. Firing here too would say the same thing twice.
+            guard schedule.calendarEventIdentifier == nil,
+                  let fireAt = schedule.alarmMoment, fireAt > now
+            else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = schedule.text
+            content.body = alarmBody(for: schedule)
+            content.sound = .default
+
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireAt)
+            let request = UNNotificationRequest(
+                identifier: Self.schedulePrefix + schedule.id.uuidString,
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            )
+            try? await center.add(request)
+        }
+    }
+
+    private func alarmBody(for schedule: Schedule) -> String {
+        var parts: [String] = []
+        if schedule.isAllDay {
+            parts.append("종일")
+        } else if let timeString = schedule.timeString {
+            parts.append(DateHelpers.format12Hour(fromHHmm: DateHelpers.format24Hour(from: timeString)))
+        }
+        if let location = schedule.locationText, !location.isEmpty { parts.append(location) }
+        return parts.joined(separator: " · ")
     }
 
     private func scheduleTodoReminders(_ todos: [TodoItem]) async {

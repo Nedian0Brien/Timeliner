@@ -126,7 +126,7 @@ struct RootView: View {
             .map { "\($0.id)|\($0.reminderAt?.timeIntervalSince1970 ?? -1)|\($0.completed)|\($0.date.timeIntervalSince1970)|\($0.text)" }
             .joined(separator: ";")
         let schedules = allSchedules
-            .map { "\($0.id)|\($0.date.timeIntervalSince1970)" }
+            .map { "\($0.id)|\($0.date.timeIntervalSince1970)|\($0.timeString ?? "")|\($0.isAllDay)|\($0.alarmMinutesBefore ?? -1)|\($0.calendarEventIdentifier ?? "")|\($0.text)" }
             .joined(separator: ";")
         return "\(notifications.digestEnabled)|\(notifications.digestMinutes)|\(todos)|\(schedules)"
     }
