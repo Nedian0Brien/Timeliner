@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A10000000000000000000211 /* TimelineRailMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000210 /* TimelineRailMetrics.swift */; };
 		A10000000000000000000203 /* TimelineRailMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* TimelineRailMetricsTests.swift */; };
+		A10000010000000000000F30 /* TodoOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000F30 /* TodoOrderingTests.swift */; };
 		265CF6442FE069FC0015117C /* EventKitSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265CF6432FE069FC0015117C /* EventKitSyncManager.swift */; };
 		A10000010000000000000F10 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000F10 /* NotificationScheduler.swift */; };
 		A1000001000000000000001A /* TimelinerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* TimelinerApp.swift */; };
@@ -44,6 +45,7 @@
 /* Begin PBXFileReference section */
 		A10000000000000000000210 /* TimelineRailMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineRailMetrics.swift; sourceTree = "<group>"; };
 		A10000000000000000000202 /* TimelineRailMetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineRailMetricsTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000F30 /* TodoOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoOrderingTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000200 /* TimelinerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimelinerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		265CF6432FE069FC0015117C /* EventKitSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitSyncManager.swift; sourceTree = "<group>"; };
 		A10000000000000000000F10 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000202 /* TimelineRailMetricsTests.swift */,
+				A10000000000000000000F30 /* TodoOrderingTests.swift */,
 			);
 			path = TimelinerTests;
 			sourceTree = "<group>";
@@ -404,6 +407,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000203 /* TimelineRailMetricsTests.swift in Sources */,
+				A10000010000000000000F30 /* TodoOrderingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

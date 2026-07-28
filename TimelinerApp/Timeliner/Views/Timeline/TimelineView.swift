@@ -418,6 +418,7 @@ private enum TimelineRow: Identifiable {
 }
 
 struct TimelineTabView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
 
@@ -1563,8 +1564,23 @@ struct TimelineTabView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(items) { todo in
-                        TodoRowView(todo: todo)
+                        TodoRowView(todo: todo, showsReorderHandle: items.count > 1)
                             .padding(.vertical, 5)
+                            // The block is a `VStack`, not a `List`, so `onMove` is not on
+                            // offer. This is the same drag the photo strip in the record
+                            // editor uses — a long press to pick up, so a plain tap still
+                            // reaches the circle and the text underneath.
+                            .draggable(todo.id.uuidString) {
+                                Text(todo.text)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.thinMaterial, in: .rect(cornerRadius: 10))
+                            }
+                            .dropDestination(for: String.self) { dropped, _ in
+                                moveTodo(dropped.first, onto: todo, within: items)
+                            }
                     }
                 }
                 .padding(.horizontal, 14)
@@ -1575,6 +1591,47 @@ struct TimelineTabView: View {
             .padding(.leading, cardGap)
         }
         .padding(.bottom, 14)
+    }
+
+    /// Takes the dragged todo out and puts it back where the target sits.
+    ///
+    /// `items` is the block as drawn, which for a day is all of it — the timeline hides
+    /// nothing. It still goes through `TodoOrdering` rather than renumbering 0…n, because
+    /// the same day can be reordered from the todo list where completed rows may be
+    /// hidden, and two rules for one field is one too many.
+    @discardableResult
+    private func moveTodo(_ draggedID: String?, onto target: TodoItem, within items: [TodoItem]) -> Bool {
+        guard let draggedID, let dragged = UUID(uuidString: draggedID), dragged != target.id,
+              let from = items.firstIndex(where: { $0.id == dragged }),
+              let to = items.firstIndex(where: { $0.id == target.id })
+        else { return false }
+
+        var reordered = items
+        let moved = reordered.remove(at: from)
+        reordered.insert(moved, at: to)
+
+        let previousOrders = items.map(\.sortOrder)
+        let assigned = TodoOrdering.renumber(
+            daySlots: items.map(\.id),
+            visibleInNewOrder: reordered.map(\.id)
+        )
+
+        withAnimation(.snappy(duration: 0.25)) {
+            for todo in items {
+                if let order = assigned[todo.id] { todo.sortOrder = order }
+            }
+        }
+
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            for (todo, order) in zip(items, previousOrders) {
+                todo.sortOrder = order
+            }
+            modelContext.rollback()
+            return false
+        }
     }
 
     /// How the rail stops.

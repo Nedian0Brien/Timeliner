@@ -152,14 +152,8 @@ struct TodoListView: View {
             .map { $0 + 1 } ?? 0
     }
 
-    /// Reorders within one day.
-    ///
-    /// The drag happens on what is on screen, which with completed items hidden is only
-    /// part of the day. So the move is applied to the visible rows, and then written back
-    /// over the day's full list slot by slot: a slot held by a hidden row keeps it, and
-    /// the visible rows are dealt into the slots they already occupied, in their new
-    /// order. Renumbering the visible rows 0…n instead would quietly shuffle the hidden
-    /// ones — you would turn the filter back on and find a different list than you left.
+    /// Reorders within one day. The renumbering itself lives in `TodoOrdering`, which
+    /// the timeline's block shares and which the tests can reach without a store.
     private func move(_ offsets: IndexSet, to destination: Int, visible: [TodoItem], on day: Date) {
         var reordered = visible
         reordered.move(fromOffsets: offsets, toOffset: destination)
@@ -167,17 +161,15 @@ struct TodoListView: View {
         let dayTodos = todos
             .filter { DateHelpers.sameDay($0.date, day) }
             .sorted { $0.sortOrder < $1.sortOrder }
-        let visibleIDs = Set(visible.map(\.id))
         let previousOrders = dayTodos.map(\.sortOrder)
+        let assigned = TodoOrdering.renumber(
+            daySlots: dayTodos.map(\.id),
+            visibleInNewOrder: reordered.map(\.id)
+        )
 
-        var incoming = reordered.makeIterator()
         withAnimation(.snappy(duration: 0.25)) {
-            for (slot, occupant) in dayTodos.enumerated() {
-                if visibleIDs.contains(occupant.id) {
-                    incoming.next()?.sortOrder = slot
-                } else {
-                    occupant.sortOrder = slot
-                }
+            for todo in dayTodos {
+                if let order = assigned[todo.id] { todo.sortOrder = order }
             }
         }
 
