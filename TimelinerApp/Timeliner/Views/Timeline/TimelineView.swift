@@ -1653,14 +1653,16 @@ struct TimelineTabView: View {
         return "\(max(1, days))일 뒤"
     }
 
+    private var nowTint: Color { TimelinerDesign.now(for: scheme) }
+
     private var currentTimeMarker: some View {
         HStack(spacing: 0) {
             ZStack {
                 Circle()
-                    .fill(Color.accentColor.opacity(0.22))
+                    .fill(nowTint.opacity(0.22))
                     .frame(width: 34, height: 34)
                 Circle()
-                    .stroke(Color.accentColor.opacity(0.48), lineWidth: 2.5)
+                    .stroke(nowTint.opacity(0.48), lineWidth: 2.5)
                     .frame(width: 28, height: 28)
                     .phaseAnimator(reduceMotion ? [.reset] : CurrentTimePulsePhase.allCases) { content, phase in
                         content
@@ -1670,9 +1672,9 @@ struct TimelineTabView: View {
                         phase.animation
                     }
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(nowTint)
                     .frame(width: 12, height: 12)
-                    .shadow(color: Color.accentColor.opacity(0.5), radius: 8)
+                    .shadow(color: nowTint.opacity(0.5), radius: 8)
             }
             .frame(width: railWidth, height: timeLineHeight)
 
@@ -1682,19 +1684,19 @@ struct TimelineTabView: View {
                 HStack(spacing: 8) {
                     timeText(
                         DateHelpers.format24Hour(from: liveDate),
-                        tint: Color.accentColor
+                        tint: nowTint
                     )
                     Text("지금")
                         .font(.caption.bold())
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(nowTint)
                     Rectangle()
-                        .fill(Color.accentColor.opacity(0.38))
+                        .fill(nowTint.opacity(0.38))
                         .frame(height: 1.5)
                     if let countdown = nextScheduleCountdown {
                         Text(countdown)
                             .font(.caption2.weight(.semibold))
                             .monospacedDigit()
-                            .foregroundStyle(Color.accentColor.opacity(0.85))
+                            .foregroundStyle(nowTint.opacity(0.85))
                             .lineLimit(1)
                             // The rule is the one part with nothing to say, so it is what
                             // gives way when the title is long.

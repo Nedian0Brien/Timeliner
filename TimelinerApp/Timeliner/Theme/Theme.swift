@@ -5,6 +5,21 @@ enum TimelinerDesign {
     static let darkAccent = Color(red: 0.59, green: 0.74, blue: 0.98)
     static let success = Color(red: 0.09, green: 0.79, blue: 0.39)
 
+    /// The colour of "지금", and of nothing else.
+    ///
+    /// It used to be the accent, which meant the one line you look for first wore the
+    /// same colour as every button, link and selected tab on the screen — and against a
+    /// blue sky it had nothing to be distinct from. Red is what every calendar marks the
+    /// current time in, and it is the one hue the sky never takes.
+    ///
+    /// Two of them because the backgrounds are so far apart: the darker red disappears
+    /// into a midnight sky, and the lighter one glares on a noon one.
+    static func now(for scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 1.00, green: 0.42, blue: 0.38)
+            : Color(red: 0.86, green: 0.15, blue: 0.13)
+    }
+
     static func foreground(for scheme: ColorScheme) -> Color {
         scheme == .dark ? .white : Color(red: 0.10, green: 0.10, blue: 0.10)
     }
