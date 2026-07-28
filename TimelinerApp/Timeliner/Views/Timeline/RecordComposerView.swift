@@ -114,6 +114,15 @@ struct RecordComposerView: View {
     private var todos: [TodoItem]
 
     @Binding var draft: RecordInputDraft
+    /// The text being typed, held here rather than in `draft`.
+    ///
+    /// `draft` lives in `RootView`'s `@State`, so writing to it on every keystroke made
+    /// the whole app's root — the tab view, the bottom accessory, everything behind this
+    /// cover — re-evaluate once per character. Nothing out there needs to see the text
+    /// mid-sentence: the pill that displays it is underneath a full-screen cover, and the
+    /// only readers that matter are the submit button and the save itself. So the typing
+    /// stays in here and is handed back when the composer closes.
+    @State private var text: String = ""
     @Binding var isPresented: Bool
     /// Screen rect of the stage-one pill. The card starts life scaled down onto it.
     var pillFrame: CGRect = .zero
@@ -235,6 +244,8 @@ struct RecordComposerView: View {
     /// back open mid-exit.
     private func revealIfReady() {
         guard phase == .collapsed, cardFrame.height > 0 else { return }
+        // Picks up whatever the pill was still holding from a cancelled sitting.
+        text = draft.inputText
         withAnimation(reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.82)) {
             phase = .expanded
         }
@@ -268,6 +279,9 @@ struct RecordComposerView: View {
     /// The cover's own slide would fight the morph, so it is dropped instantly and
     /// the shrink above carries the exit.
     private func closeWithoutCoverTransition() {
+        // Handed back on the way out so a cancelled sentence is still in the pill when
+        // you come back to it — the one thing the root actually needed from the typing.
+        draft.inputText = text
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { isPresented = false }
@@ -292,7 +306,7 @@ struct RecordComposerView: View {
             )
             .frame(height: 32)
 
-            TextField(draft.entryType.placeholder, text: $draft.inputText, axis: .vertical)
+            TextField(draft.entryType.placeholder, text: $text, axis: .vertical)
                 .font(.callout)
                 .lineLimit(3...9)
                 .textInputAutocapitalization(.never)
@@ -433,7 +447,7 @@ struct RecordComposerView: View {
     }
 
     private var canSubmit: Bool {
-        !draft.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || (draft.entryType == .record && !draft.photos.isEmpty)
     }
 
@@ -483,7 +497,7 @@ struct RecordComposerView: View {
     }
 
     private func addItem() {
-        let trimmed = draft.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSubmit else { return }
 
         switch draft.entryType {
@@ -524,6 +538,7 @@ struct RecordComposerView: View {
         do {
             try modelContext.save()
             draft.reset()
+            text = ""
             savePulse += 1
             onRecordAdded?()
             dismiss()
