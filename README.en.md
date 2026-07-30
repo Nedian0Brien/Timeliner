@@ -16,6 +16,7 @@ No hopping between a notes app, a to-do app, and a calendar. The day reads as on
 ![SwiftData](https://img.shields.io/badge/SwiftData-local--first-34C759?style=flat-square)
 ![EventKit](https://img.shields.io/badge/EventKit-Calendar%20·%20Reminders-FF9500?style=flat-square)
 ![Platform](https://img.shields.io/badge/iPhone%20·%20iPad-universal-8E8E93?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [한국어](README.md) · **English**
 
@@ -39,6 +40,7 @@ No hopping between a notes app, a to-do app, and a calendar. The day reads as on
 - [Things to know before contributing](#things-to-know-before-contributing)
 - [Known limitations](#known-limitations)
 - [Credits](#credits)
+- [Licence](#licence)
 
 ---
 
@@ -169,10 +171,12 @@ so nothing about what is past and what is upcoming is ever a lie.
 <details open>
 <summary><b>Apple Calendar & Reminders</b></summary>
 
-- EventKit imports calendar events and reminders — events become `Schedule`, reminders become `TodoItem`.
-- Items removed at the source are cleaned up, changed ones are updated, and the result reports inserted / updated / deleted counts.
+- **Todos ↔ Reminders go both ways.** What you make in Reminders is imported; what you write in Timeliner is created over there. Text, date, completion and deletion all flow in both directions.
+- **You pick the Reminders list.** Settings chooses where new todos land; the edit sheet overrides it for one todo.
+- Events are still one-way — "save to Apple Calendar" in the edit sheet exports them, and importing always works.
+- **Only what is actually gone gets deleted.** An item that moved outside the import window, or lost its due date, is checked for existence first and then followed to its new date rather than removed.
 - Calendar and Reminders permissions are requested **separately**; granting one still syncs that one.
-- Reminders with no date have nowhere to sit on a time axis, so they are skipped — and the count of skipped ones is reported.
+- Reminders with no date have nowhere to sit on a time axis, so they are not imported — and the count of skipped ones is reported.
 
 </details>
 
@@ -511,10 +515,9 @@ and *measure instead of guessing from a screenshot*. They read fine for humans t
 |---|---|
 | 🔌 **Search is not reachable** | `SearchView` is implemented but nothing presents it. The timeline hid its navigation bar, which took the `.searchable` field with it, and no new entry point has replaced it. |
 | ☁️ **No sync** | `cloudKitDatabase: .none`. Data lives on the device. |
-| ↔️ **EventKit is import-only** | Apple Calendar/Reminders → Timeliner, not the other way. |
+| ↔️ **Apple Calendar is still one-way** | Todos ↔ Reminders sync both ways; events only leave Timeliner through the edit sheet. |
 | 🌐 **Korean-only UI** | Strings are inline in the source; nothing is localised yet. |
 | 📱 **iPad is a scaled-up phone** | The build is universal, but there is no large-screen layout yet. |
-| 📄 **No licence chosen yet** | With no licence file, all rights are reserved by default. |
 
 ---
 
@@ -526,6 +529,12 @@ and *measure instead of guessing from a screenshot*. They read fine for humans t
   NASA, Greg Rakozy, Joshua Hibbert, Alexey Topolyanskiy, Andrew Ridley, Wolfgang Lutz,
   Christian Joudrey, Steve Carter, Ales Krivec, Philippe Wuyts.
 - Icons are Apple SF Symbols.
+
+---
+
+## Licence
+
+[MIT](LICENSE). Use it, change it, ship it — just keep the copyright notice.
 
 <div align="center">
 <br />

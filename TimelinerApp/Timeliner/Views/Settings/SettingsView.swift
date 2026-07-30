@@ -1,3 +1,4 @@
+import EventKit
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -7,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject private var appearance: AppearanceSettings
     @EnvironmentObject private var dataStore: DataStore
     @StateObject private var notifications = NotificationScheduler.shared
+    @StateObject private var syncManager = EventKitSyncManager.shared
     @Environment(\.colorScheme) private var scheme
 
     @Query private var schedules: [Schedule]
@@ -14,6 +16,7 @@ struct SettingsView: View {
     @Query private var todos: [TodoItem]
 
     @State private var photoItem: PhotosPickerItem?
+    @State private var reminderLists: [EKCalendar] = []
 
     var body: some View {
         NavigationStack {
@@ -27,6 +30,7 @@ struct SettingsView: View {
                         previewTimeCard
                     }
                     notificationCard
+                    reminderSyncCard
                     dataModeCard
                 }
                 .padding(.horizontal, 16)
@@ -106,6 +110,72 @@ struct SettingsView: View {
 
     private var digestHHmm: String {
         String(format: "%02d:%02d", notifications.digestMinutes / 60, notifications.digestMinutes % 60)
+    }
+
+    // MARK: - Reminders
+
+    /// Where new todos go, answered once for the whole app.
+    ///
+    /// The edit sheet has its own switch, but two of the three ways to write a todo — the
+    /// row at the bottom of each day, the timeline composer — are a line and a return key
+    /// with nowhere to put a question. This is where that question gets asked instead.
+    private var reminderSyncCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("Apple 미리알림", systemImage: "checklist")
+
+            Toggle("새 할 일을 미리알림에도 추가", isOn: Binding(
+                get: { syncManager.exportsNewTodos },
+                set: { syncManager.exportsNewTodos = $0 }
+            ))
+
+            if syncManager.exportsNewTodos {
+                if reminderLists.isEmpty {
+                    Text(syncManager.canSyncReminders
+                         ? "쓸 수 있는 미리알림 목록이 없습니다."
+                         : "미리알림 접근 권한이 필요합니다. iOS 설정에서 허용해 주세요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Picker("목록", selection: Binding(
+                        get: { syncManager.defaultReminderList },
+                        set: { syncManager.defaultReminderList = $0 }
+                    )) {
+                        ForEach(reminderLists, id: \.calendarIdentifier) { list in
+                            Text(list.title).tag(list.calendarIdentifier)
+                        }
+                    }
+                }
+            }
+
+            Text(syncManager.exportsNewTodos
+                 ? "어디에서 적든 미리알림에도 만들어집니다. 하나만 예외로 두려면 그 할 일을 열어서 끄면 됩니다."
+                 : "할 일을 열어서 켠 것만 미리알림에 만들어집니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassCard(cornerRadius: 20)
+        .animation(.snappy(duration: 0.25), value: syncManager.exportsNewTodos)
+        // Reading the lists is what asks for 미리알림 access, so it waits until the switch
+        // says someone wants it.
+        .task { if syncManager.exportsNewTodos { await loadReminderLists() } }
+        .onChange(of: syncManager.exportsNewTodos) { _, isOn in
+            guard isOn, reminderLists.isEmpty else { return }
+            Task { await loadReminderLists() }
+        }
+    }
+
+    private func loadReminderLists() async {
+        reminderLists = await syncManager.reminderLists()
+        // Also covers a list deleted or turned read-only since it was chosen: the picker
+        // would show nothing selected while holding an identifier nothing resolves.
+        let known = reminderLists.contains { $0.calendarIdentifier == syncManager.defaultReminderList }
+        if !known {
+            syncManager.defaultReminderList = await syncManager.defaultReminderListIdentifier() ?? ""
+        }
     }
 
     // MARK: - Background mode

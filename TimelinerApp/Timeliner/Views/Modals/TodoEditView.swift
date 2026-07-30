@@ -13,11 +13,6 @@ struct TodoEditView: View {
         case create(day: Date)
     }
 
-    /// Whether the last todo saved went to 미리알림, so the next new one starts the same
-    /// way. Someone who keeps their todos in Reminders keeps all of them there, and
-    /// making that two extra taps per row is how a sync feature stops being used.
-    private static let exportDefaultKey = "todoExportsToReminders"
-
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @StateObject private var syncManager = EventKitSyncManager.shared
@@ -53,8 +48,15 @@ struct TodoEditView: View {
             _text = State(initialValue: "")
             _day = State(initialValue: DateHelpers.startOfDay(day))
             _reminderAt = State(initialValue: nil)
-            _exportToReminders = State(initialValue: UserDefaults.standard.bool(forKey: Self.exportDefaultKey))
-            _reminderListIdentifier = State(initialValue: nil)
+            // Read straight from `UserDefaults` rather than from the sync manager that
+            // owns these: a `View.init` is not main-actor isolated and cannot reach it.
+            // The settings switch decides where new todos go; this sheet only overrides
+            // that for the one being written, and never writes back.
+            let defaults = UserDefaults.standard
+            _exportToReminders = State(initialValue: defaults.bool(forKey: ReminderSyncDefaults.exportsNewTodos))
+            _reminderListIdentifier = State(
+                initialValue: defaults.string(forKey: ReminderSyncDefaults.defaultList).flatMap { $0.isEmpty ? nil : $0 }
+            )
         }
     }
 
@@ -269,6 +271,7 @@ struct TodoEditView: View {
 
         Task {
             var identifier = currentReminderIdentifier
+            var listIdentifier = reminderListIdentifier
 
             if exportToReminders {
                 let written = await syncManager.exportReminder(
@@ -283,24 +286,32 @@ struct TodoEditView: View {
                         ?? "Apple 미리알림에 저장하지 못했습니다."
                     return
                 }
-                identifier = written
+                identifier = written.identifier
+                // Where it actually landed, which is not always where it was sent: the
+                // chosen list may have been deleted between choosing and saving.
+                listIdentifier = written.listIdentifier
             } else if let identifier {
                 // Switched off after having been on: the copy over there is now orphaned,
                 // and leaving it behind is how one todo becomes two that drift apart.
                 await syncManager.deleteExportedReminder(identifier: identifier)
             }
 
-            UserDefaults.standard.set(exportToReminders, forKey: Self.exportDefaultKey)
             applyLocally(
                 text: trimmed,
                 day: newDay,
-                reminderIdentifier: exportToReminders ? identifier : nil
+                reminderIdentifier: exportToReminders ? identifier : nil,
+                reminderListIdentifier: listIdentifier
             )
             isSaving = false
         }
     }
 
-    private func applyLocally(text: String, day: Date, reminderIdentifier: String?) {
+    private func applyLocally(
+        text: String,
+        day: Date,
+        reminderIdentifier: String?,
+        reminderListIdentifier: String?
+    ) {
         let todo: TodoItem
         let isNew: Bool
         switch mode {

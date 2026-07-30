@@ -16,6 +16,7 @@
 ![SwiftData](https://img.shields.io/badge/SwiftData-local--first-34C759?style=flat-square)
 ![EventKit](https://img.shields.io/badge/EventKit-캘린더%20·%20미리알림-FF9500?style=flat-square)
 ![Platform](https://img.shields.io/badge/iPhone%20·%20iPad-universal-8E8E93?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 **한국어** · [English](README.en.md)
 
@@ -37,6 +38,7 @@
 - [기여할 때 알아둘 것](#기여할-때-알아둘-것)
 - [알려진 한계](#알려진-한계)
 - [크레딧](#크레딧)
+- [라이선스](#라이선스)
 
 ---
 
@@ -167,10 +169,12 @@ Timeliner는 그 셋을 한 줄의 세로 레일 위에 시간 순으로 꽂아 
 <details open>
 <summary><b>Apple 캘린더 · 미리알림 연동</b></summary>
 
-- EventKit으로 캘린더 이벤트와 미리알림을 가져옵니다. 캘린더 → `Schedule`, 미리알림 → `TodoItem`.
-- 원본이 지워지면 가져온 항목도 정리하고, 바뀌었으면 갱신합니다(추가 / 갱신 / 삭제 건수를 알려줍니다).
+- **할 일 ↔ 미리알림은 양방향입니다.** 미리알림에서 만든 것은 가져오고, Timeliner에서 적은 것은 미리알림에 만듭니다. 내용·날짜·완료 여부·삭제가 양쪽으로 흐릅니다.
+- **미리알림 목록을 고를 수 있습니다.** 설정 탭에서 새 할 일이 들어갈 목록을 정하고, 할 일 하나하나는 수정 시트에서 예외를 둡니다.
+- 일정은 아직 한쪽입니다 — 수정 시트의 'Apple 캘린더에 저장'으로 내보낼 수 있고, 가져오기는 늘 동작합니다.
+- **없어진 것만 지웁니다.** 가져오기 기간 밖으로 옮겨졌거나 마감일이 지워진 항목은, 살아 있는지 다시 확인한 뒤 지우는 대신 날짜를 따라 옮깁니다.
 - 캘린더와 미리알림 권한은 **각각** 요청하며, 한쪽만 허용해도 그쪽만 동기화합니다.
-- 날짜 없는 미리알림은 시간 축에 놓을 자리가 없으므로 건너뛰고, 몇 건을 건너뛰었는지 알려줍니다.
+- 날짜 없는 미리알림은 시간 축에 놓을 자리가 없으므로 가져오지 않고, 몇 건을 건너뛰었는지 알려줍니다.
 
 </details>
 
@@ -505,10 +509,9 @@ scripts/
 |---|---|
 | 🔌 **검색 화면이 연결되어 있지 않습니다** | `SearchView`는 구현되어 있지만 어디에서도 띄우지 않습니다. 타임라인이 내비게이션 바를 숨기면서 `.searchable` 필드가 함께 사라졌고, 새 진입점이 아직 없습니다. |
 | ☁️ **동기화가 없습니다** | `cloudKitDatabase: .none`. 데이터는 기기 안에만 있습니다. |
-| ↔️ **EventKit은 가져오기만 합니다** | Apple 캘린더/미리알림 → Timeliner 방향만 지원합니다. |
+| ↔️ **Apple 캘린더는 아직 한쪽입니다** | 할 일 ↔ 미리알림은 양방향이지만, 일정은 수정 시트에서만 내보냅니다. |
 | 🌐 **UI가 한국어 전용입니다** | 문자열이 코드에 직접 박혀 있어 현지화 준비가 되어 있지 않습니다. |
 | 📱 **iPad 레이아웃은 확대판입니다** | 유니버설 빌드지만 큰 화면에 맞춘 레이아웃은 아직 없습니다. |
-| 📄 **라이선스가 아직 정해지지 않았습니다** | 라이선스 파일이 없으므로 기본적으로 모든 권리는 저작자에게 있습니다. |
 
 ---
 
@@ -520,6 +523,12 @@ scripts/
   NASA, Greg Rakozy, Joshua Hibbert, Alexey Topolyanskiy, Andrew Ridley, Wolfgang Lutz,
   Christian Joudrey, Steve Carter, Ales Krivec, Philippe Wuyts.
 - 아이콘은 Apple SF Symbols.
+
+---
+
+## 라이선스
+
+[MIT](LICENSE). 마음대로 쓰고, 고치고, 배포하세요 — 저작권 표시만 남겨 주시면 됩니다.
 
 <div align="center">
 <br />

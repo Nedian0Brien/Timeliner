@@ -500,6 +500,9 @@ struct RecordComposerView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSubmit else { return }
 
+        // Held so the todo can be pushed to 미리알림 once the local save has gone through.
+        var newTodo: TodoItem?
+
         switch draft.entryType {
         case .record:
             let record = Record(
@@ -520,7 +523,9 @@ struct RecordComposerView: View {
                 .map(\.sortOrder)
                 .max()
                 .map { $0 + 1 } ?? 0
-            modelContext.insert(TodoItem(date: day, text: trimmed, sortOrder: nextSortOrder))
+            let todo = TodoItem(date: day, text: trimmed, sortOrder: nextSortOrder)
+            modelContext.insert(todo)
+            newTodo = todo
 
         case .schedule:
             let endDate = max(draft.pickedEndDate, draft.pickedDate.addingTimeInterval(3600))
@@ -537,6 +542,10 @@ struct RecordComposerView: View {
 
         do {
             try modelContext.save()
+            if let newTodo {
+                // After the save, and not waited on: the composer is already closing.
+                EventKitSyncManager.shared.exportNewTodo(newTodo, context: modelContext)
+            }
             draft.reset()
             text = ""
             savePulse += 1

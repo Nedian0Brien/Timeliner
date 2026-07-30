@@ -1,6 +1,27 @@
 import EventKit
 import Foundation
+import SwiftData
+import SwiftUI
 import UIKit
+
+/// The keys behind the app-wide 미리알림 settings.
+///
+/// Named in one place because the sheet reads them from a `View.init`, which is not
+/// main-actor isolated and so cannot reach the sync manager that owns them.
+enum ReminderSyncDefaults {
+    static let exportsNewTodos = "todoExportsNewToReminders"
+    static let defaultList = "todoDefaultReminderListIdentifier"
+}
+
+/// What came back from writing a todo out to 미리알림.
+///
+/// The list is reported rather than assumed: the one that was asked for may have been
+/// deleted or turned read-only since it was chosen, in which case the reminder went
+/// somewhere else and the todo needs to remember where it actually landed.
+struct ExportedReminder {
+    let identifier: String
+    let listIdentifier: String?
+}
 
 struct EventKitImportResult {
     let insertedSchedules: [Schedule]
@@ -10,6 +31,9 @@ struct EventKitImportResult {
     let updatedScheduleCount: Int
     let updatedTodoCount: Int
     let skippedDatelessReminderCount: Int
+    /// Items that fell out of the window because their date moved, not because they were
+    /// deleted. They were followed to their new date instead of being removed.
+    let movedOutOfRangeCount: Int
 
     var importedScheduleCount: Int { insertedSchedules.count + updatedScheduleCount }
     var importedTodoCount: Int { insertedTodos.count + updatedTodoCount }
@@ -24,6 +48,20 @@ final class EventKitSyncManager: ObservableObject {
     @Published private(set) var reminderStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
     @Published private(set) var isSyncing: Bool = false
     @Published var statusMessage: String?
+
+    /// Whether a todo written anywhere in the app is also created in 미리알림.
+    ///
+    /// Here rather than in each entry point because it is one answer about where your
+    /// todos live, and the quick paths — a row typed into the list, a line typed into the
+    /// timeline composer — have nowhere to ask it.
+    @AppStorage(ReminderSyncDefaults.exportsNewTodos) var exportsNewTodos: Bool = false {
+        didSet { objectWillChange.send() }
+    }
+
+    /// The list those todos go into. Empty means whatever 미리알림 itself would pick.
+    @AppStorage(ReminderSyncDefaults.defaultList) var defaultReminderList: String = "" {
+        didSet { objectWillChange.send() }
+    }
 
     private let eventStore = EKEventStore()
     private let calendar = DateHelpers.calendar
@@ -71,6 +109,7 @@ final class EventKitSyncManager: ObservableObject {
         var updatedScheduleCount = 0
         var updatedTodoCount = 0
         var skippedDatelessReminderCount = 0
+        var movedOutOfRangeCount = 0
         var importedSources: [String] = []
         var blockedSources: [String] = []
 
@@ -86,6 +125,7 @@ final class EventKitSyncManager: ObservableObject {
                 insertedSchedules = eventResult.inserted
                 deletedSchedules = eventResult.deleted
                 updatedScheduleCount = eventResult.updated
+                movedOutOfRangeCount += eventResult.moved
                 importedSources.append("캘린더")
             } else {
                 blockedSources.append("캘린더")
@@ -101,6 +141,7 @@ final class EventKitSyncManager: ObservableObject {
                 deletedTodos = reminderResult.deleted
                 updatedTodoCount = reminderResult.updated
                 skippedDatelessReminderCount = reminderResult.skippedDateless
+                movedOutOfRangeCount += reminderResult.moved
                 importedSources.append("미리알림")
             } else {
                 blockedSources.append("미리알림")
@@ -123,7 +164,8 @@ final class EventKitSyncManager: ObservableObject {
             deletedTodos: deletedTodos,
             updatedScheduleCount: updatedScheduleCount,
             updatedTodoCount: updatedTodoCount,
-            skippedDatelessReminderCount: skippedDatelessReminderCount
+            skippedDatelessReminderCount: skippedDatelessReminderCount,
+            movedOutOfRangeCount: movedOutOfRangeCount
         )
 
         statusMessage = importSummary(for: result, importedSources: importedSources, blockedSources: blockedSources)
@@ -185,7 +227,7 @@ final class EventKitSyncManager: ObservableObject {
         day: Date,
         listIdentifier: String?,
         existingIdentifier: String?
-    ) async -> String? {
+    ) async -> ExportedReminder? {
         guard await ensureReminderAccess() else { return nil }
 
         let reminder: EKReminder
@@ -215,10 +257,39 @@ final class EventKitSyncManager: ObservableObject {
         do {
             try eventStore.save(reminder, commit: true)
             statusMessage = nil
-            return reminder.calendarItemIdentifier
+            return ExportedReminder(
+                identifier: reminder.calendarItemIdentifier,
+                listIdentifier: list.calendarIdentifier
+            )
         } catch {
             statusMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Writes a freshly created todo out to 미리알림 when the app-wide switch is on, and
+    /// files the link back on it.
+    ///
+    /// Fire-and-forget on purpose. The todo is already saved locally before this runs, so
+    /// a failure here costs the link and not the note. And the two callers are the quick
+    /// paths — a line and a return key — where an alert would interrupt the next line
+    /// being typed to report something the row already shows by not carrying the
+    /// "Apple 미리알림" caption.
+    func exportNewTodo(_ todo: TodoItem, context: ModelContext) {
+        guard exportsNewTodos else { return }
+        let requestedList = defaultReminderList.isEmpty ? nil : defaultReminderList
+
+        Task {
+            guard let written = await exportReminder(
+                title: todo.text,
+                day: todo.date,
+                listIdentifier: requestedList,
+                existingIdentifier: nil
+            ) else { return }
+
+            todo.reminderIdentifier = written.identifier
+            todo.reminderListIdentifier = written.listIdentifier
+            try? context.save()
         }
     }
 
@@ -458,7 +529,7 @@ final class EventKitSyncManager: ObservableObject {
         from startDate: Date,
         to endDate: Date,
         existingSchedules: [Schedule]
-    ) -> (inserted: [Schedule], deleted: [Schedule], updated: Int) {
+    ) -> (inserted: [Schedule], deleted: [Schedule], updated: Int, moved: Int) {
         let predicate = eventStore.predicateForEvents(withStart: startDate, end: endDate, calendars: nil)
         let events = eventStore.events(matching: predicate)
         var schedulesByIdentifier = Dictionary(uniqueKeysWithValues: existingSchedules.compactMap { schedule in
@@ -482,19 +553,33 @@ final class EventKitSyncManager: ObservableObject {
             }
         }
 
-        let deleted = existingSchedules.filter { schedule in
-            guard let identifier = schedule.calendarEventIdentifier else { return false }
-            return schedule.date >= startDate && schedule.date < endDate && !seenIdentifiers.contains(identifier)
+        // Absent from the window is not the same as gone. An event dragged to next year
+        // stops matching the predicate while still existing, and deleting the local copy
+        // for that would turn "postponed" into "erased" — along with everything Apple
+        // 캘린더 never knew about it.
+        var deleted: [Schedule] = []
+        var moved = 0
+        for schedule in existingSchedules {
+            guard let identifier = schedule.calendarEventIdentifier,
+                  schedule.date >= startDate, schedule.date < endDate,
+                  !seenIdentifiers.contains(identifier) else { continue }
+
+            guard let event = eventStore.event(withIdentifier: identifier) else {
+                deleted.append(schedule)
+                continue
+            }
+            update(schedule, with: event)
+            moved += 1
         }
 
-        return (inserted, deleted, updated)
+        return (inserted, deleted, updated, moved)
     }
 
     private func importReminders(
         from startDate: Date,
         to endDate: Date,
         existingTodos: [TodoItem]
-    ) async throws -> (inserted: [TodoItem], deleted: [TodoItem], updated: Int, skippedDateless: Int) {
+    ) async throws -> (inserted: [TodoItem], deleted: [TodoItem], updated: Int, skippedDateless: Int, moved: Int) {
         let reminders = await reminders(from: startDate, to: endDate)
         var todosByIdentifier = Dictionary(uniqueKeysWithValues: existingTodos.compactMap { todo in
             todo.reminderIdentifier.map { ($0, todo) }
@@ -528,12 +613,40 @@ final class EventKitSyncManager: ObservableObject {
             }
         }
 
-        let deleted = existingTodos.filter { todo in
-            guard let identifier = todo.reminderIdentifier else { return false }
-            return todo.date >= startDate && todo.date < endDate && !seenIdentifiers.contains(identifier)
+        // Absent from the window is not the same as gone. A reminder whose due date is
+        // pushed past the window, or cleared entirely, stops coming back from the
+        // predicate while still sitting in 미리알림. Deleting the local todo for that
+        // turns "later" into "never", and takes the sort order and the Timeliner alarm —
+        // which 미리알림 does not hold — with it.
+        var deleted: [TodoItem] = []
+        var moved = 0
+        for todo in existingTodos {
+            guard let identifier = todo.reminderIdentifier,
+                  todo.date >= startDate, todo.date < endDate,
+                  !seenIdentifiers.contains(identifier) else { continue }
+
+            guard let reminder = eventStore.calendarItem(withIdentifier: identifier) as? EKReminder else {
+                deleted.append(todo)
+                continue
+            }
+            moved += 1
+            // A reminder that lost its date has nowhere to be followed to. It keeps the
+            // day it already had here rather than being dropped off the timeline.
+            guard let dueDate = reminder.timelinerDueDate(calendar: calendar) else { continue }
+
+            let newDay = DateHelpers.startOfDay(dueDate)
+            if !DateHelpers.sameDay(todo.date, newDay) {
+                // Its old number belonged to the day it left and may already be taken on
+                // the new one; two rows holding one order sort against each other
+                // arbitrarily.
+                let sortOrder = nextSortOrderByDay[newDay, default: 0]
+                nextSortOrderByDay[newDay] = sortOrder + 1
+                todo.sortOrder = sortOrder
+            }
+            update(todo, with: reminder, dueDate: dueDate)
         }
 
-        return (inserted, deleted, updated, skippedDateless)
+        return (inserted, deleted, updated, skippedDateless, moved)
     }
 
     private func makeSchedule(from event: EKEvent, identifier: String) -> Schedule {
@@ -668,6 +781,12 @@ final class EventKitSyncManager: ObservableObject {
         ]
         if result.deletedCount > 0 {
             parts.append("삭제 반영 \(result.deletedCount)개")
+        }
+        if result.movedOutOfRangeCount > 0 {
+            // Not "moved": one of the two ways to leave the window is having the date
+            // cleared, and nothing moved anywhere in that case. What both share is that
+            // the item is still there and was kept.
+            parts.append("기간 밖 \(result.movedOutOfRangeCount)개 유지")
         }
         if result.skippedDatelessReminderCount > 0 {
             parts.append("날짜 없는 미리알림 제외 \(result.skippedDatelessReminderCount)개")

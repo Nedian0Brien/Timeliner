@@ -132,6 +132,7 @@ struct TodoRowView: View {
 
 struct AddTodoRow: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var syncManager = EventKitSyncManager.shared
     let date: Date
     let nextSortOrder: Int
     @State private var text: String = ""
@@ -175,6 +176,9 @@ struct AddTodoRow: View {
         do {
             try modelContext.save()
             text = ""
+            // After the local save, and not waited on: the field is already empty and
+            // ready for the next line.
+            syncManager.exportNewTodo(todo, context: modelContext)
         } catch {
             modelContext.delete(todo)
             modelContext.rollback()
