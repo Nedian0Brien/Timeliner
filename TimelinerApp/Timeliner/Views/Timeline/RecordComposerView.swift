@@ -167,6 +167,9 @@ struct RecordComposerView: View {
                 .offset(y: isExpanded ? 0 : collapse.offsetY)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
+                // 맨 바깥에 건다. 안쪽 `onGeometryChange`가 재는 것은 이미 좁혀진
+                // 카드의 실제 자리라, 알약에서 자라 나오는 모프의 기준이 어긋나지 않는다.
+                .macColumnWidth()
         }
         .sensoryFeedback(.success, trigger: savePulse)
         .alert("저장 실패", isPresented: Binding(

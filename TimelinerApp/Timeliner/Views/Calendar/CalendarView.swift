@@ -41,8 +41,10 @@ struct CalendarView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 80)
             }
+            .macColumn()
             .background { AppBackground() }
             .navigationTitle("캘린더")
+            .macInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

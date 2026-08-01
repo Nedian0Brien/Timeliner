@@ -30,8 +30,10 @@ struct TodoListView: View {
                     list
                 }
             }
+            .macColumn()
             .background { AppBackground() }
             .navigationTitle("할 일")
+            .macInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

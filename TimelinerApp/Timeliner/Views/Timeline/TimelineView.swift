@@ -500,6 +500,7 @@ struct TimelineTabView: View {
     var body: some View {
         NavigationStack {
             content
+                .macColumn()
                 .background { AppBackground() }
                 // The timeline names its own days, so the title bar was repeating what
                 // the content already says while taking a large title's worth of height

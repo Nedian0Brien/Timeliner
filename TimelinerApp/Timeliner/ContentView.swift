@@ -56,6 +56,7 @@ struct RootView: View {
                                 onSelectType: { recordInputDraft.entryType = $0 },
                                 onFrameChange: { pillFrameBox.rect = $0 }
                             )
+                            .macColumnWidth()
                         }
                         .tabBarMinimizeBehavior(.onScrollDown)
                 } else {
@@ -67,6 +68,10 @@ struct RootView: View {
         // the slider has one place to move it from.
         .environment(\.backgroundDate, backgroundDate)
         .preferredColorScheme(effectiveColorScheme)
+        .macWindowSetup()
+        // 맥 메뉴의 "설정…"(⌘,)이 탭에 닿는 통로. 창이 하나뿐이라 씬 단위
+        // 포커스 값이면 충분하다.
+        .focusedSceneValue(\.selectedTab, $selection)
         .fullScreenCover(isPresented: $composerPresented) {
             RecordComposerView(
                 draft: $recordInputDraft,

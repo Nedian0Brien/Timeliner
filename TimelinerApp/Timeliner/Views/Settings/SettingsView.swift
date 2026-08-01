@@ -38,8 +38,10 @@ struct SettingsView: View {
                 .padding(.bottom, 80)
             }
             .animation(.snappy(duration: 0.25), value: appearance.mode)
+            .macColumn()
             .background { AppBackground() }
             .navigationTitle("설정")
+            .macInlineTitle()
         }
     }
 
@@ -81,16 +83,15 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(notifications.authorizationStatus == .denied
-                     ? "iOS 설정에서 Timeliner의 알림을 켜야 합니다."
+                     ? "\(PrivacySettings.appName)에서 Timeliner의 알림을 켜야 합니다."
                      : "할 일과 하루 요약을 알리려면 알림 권한이 필요합니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if notifications.authorizationStatus == .denied {
-                    Button("iOS 설정 열기") {
-                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                        UIApplication.shared.open(url)
+                    Button("\(PrivacySettings.appName) 열기") {
+                        PrivacySettings.open(.notifications)
                     }
                     .buttonStyle(.glass)
                 } else {
@@ -132,7 +133,7 @@ struct SettingsView: View {
                 if reminderLists.isEmpty {
                     Text(syncManager.canSyncReminders
                          ? "쓸 수 있는 미리알림 목록이 없습니다."
-                         : "미리알림 접근 권한이 필요합니다. iOS 설정에서 허용해 주세요.")
+                         : "미리알림 접근 권한이 필요합니다. \(PrivacySettings.appName)에서 허용해 주세요.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

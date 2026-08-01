@@ -36,6 +36,9 @@ struct TimelinerApp: App {
                 }
                 .modelContainer(dataStore.container)
         }
+        #if targetEnvironment(macCatalyst)
+        .commands { TimelinerCommands() }
+        #endif
     }
 
     private func storageWarningBanner(_ message: String) -> some View {
